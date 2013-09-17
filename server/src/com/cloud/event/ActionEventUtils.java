@@ -17,6 +17,8 @@
 
 package com.cloud.event;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -70,7 +72,7 @@ public class ActionEventUtils {
     public static Long onActionEvent(Long userId, Long accountId, Long domainId, String type, String description) {
 
         publishOnEventBus(userId, accountId, EventCategory.ACTION_EVENT.getName(),
-                type, com.cloud.event.Event.State.Completed);
+                type, com.cloud.event.Event.State.Completed, description);
 
         Event event = persistActionEvent(userId, accountId, domainId, null, type, Event.State.Completed,
                 description, null);
@@ -85,7 +87,7 @@ public class ActionEventUtils {
                                               long startEventId) {
 
         publishOnEventBus(userId, accountId, EventCategory.ACTION_EVENT.getName(), type,
-                com.cloud.event.Event.State.Scheduled);
+                com.cloud.event.Event.State.Scheduled, description);
 
         Event event = persistActionEvent(userId, accountId, null, null, type, Event.State.Scheduled,
                 description, startEventId);
@@ -100,7 +102,7 @@ public class ActionEventUtils {
                                             long startEventId) {
 
         publishOnEventBus(userId, accountId, EventCategory.ACTION_EVENT.getName(), type,
-                com.cloud.event.Event.State.Started);
+                com.cloud.event.Event.State.Started, description);
 
         Event event = persistActionEvent(userId, accountId, null, null, type, Event.State.Started,
                 description, startEventId);
@@ -111,7 +113,7 @@ public class ActionEventUtils {
                                               String description, long startEventId) {
 
         publishOnEventBus(userId, accountId, EventCategory.ACTION_EVENT.getName(), type,
-                com.cloud.event.Event.State.Completed);
+                com.cloud.event.Event.State.Completed, description);
 
         Event event = persistActionEvent(userId, accountId, null, level, type, Event.State.Completed,
                 description, startEventId);
@@ -122,7 +124,7 @@ public class ActionEventUtils {
     public static Long onCreatedActionEvent(Long userId, Long accountId, String level, String type, String description) {
 
         publishOnEventBus(userId, accountId, EventCategory.ACTION_EVENT.getName(), type,
-                com.cloud.event.Event.State.Created);
+                com.cloud.event.Event.State.Created, description);
 
         Event event = persistActionEvent(userId, accountId, null, level, type, Event.State.Created, description, null);
 
@@ -153,7 +155,7 @@ public class ActionEventUtils {
     }
 
     private static void publishOnEventBus(long userId, long accountId, String eventCategory,
-                                          String eventType, Event.State state) {
+                                          String eventType, Event.State state, String description) {
         try {
             _eventBus = ComponentContext.getComponent(EventBus.class);
         } catch(NoSuchBeanDefinitionException nbe) {
@@ -189,6 +191,11 @@ public class ActionEventUtils {
         eventDescription.put("status", state.toString());
         eventDescription.put("entity", entityType);
         eventDescription.put("entityuuid", entityUuid);
+        eventDescription.put("description", description);
+
+        String eventDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z").format(new Date());
+        eventDescription.put("eventDateTime", eventDate);
+
         event.setDescription(eventDescription);
 
         try {

@@ -21,13 +21,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.StringTokenizer;
 
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.subsystem.api.storage.StoragePoolAllocator;
+import org.apache.cloudstack.framework.config.ConfigKey;
 
 import com.cloud.agent.AgentManager;
 import com.cloud.consoleproxy.ConsoleProxyManager;
 import com.cloud.ha.HighAvailabilityManager;
 import com.cloud.hypervisor.Hypervisor.HypervisorType;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.router.VpcVirtualNetworkApplianceManager;
 import com.cloud.network.vpc.VpcManager;
 import com.cloud.server.ManagementServer;
@@ -50,25 +51,18 @@ public enum Config {
 	AlertSMTPUseAuth("Alert", ManagementServer.class, String.class, "alert.smtp.useAuth", null, "If true, use SMTP authentication when sending emails.", null),
 	AlertSMTPUsername("Alert", ManagementServer.class, String.class, "alert.smtp.username", null, "Username for SMTP authentication (applies only if alert.smtp.useAuth is true).", null),
 	CapacityCheckPeriod("Alert", ManagementServer.class, Integer.class, "capacity.check.period", "300000", "The interval in milliseconds between capacity checks", null),
-	StorageAllocatedCapacityThreshold("Alert", ManagementServer.class, Float.class, "cluster.storage.allocated.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of allocated storage utilization above which alerts will be sent about low storage available.", null, ConfigurationParameterScope.cluster.toString()),
-	StorageCapacityThreshold("Alert", ManagementServer.class, Float.class, "cluster.storage.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of storage utilization above which alerts will be sent about low storage available.", null, ConfigurationParameterScope.cluster.toString()),
-	CPUCapacityThreshold("Alert", ManagementServer.class, Float.class, "cluster.cpu.allocated.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of cpu utilization above which alerts will be sent about low cpu available.", null, ConfigurationParameterScope.cluster.toString()),
-	MemoryCapacityThreshold("Alert", ManagementServer.class, Float.class, "cluster.memory.allocated.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of memory utilization above which alerts will be sent about low memory available.", null, ConfigurationParameterScope.cluster.toString()),
 	PublicIpCapacityThreshold("Alert", ManagementServer.class, Float.class, "zone.virtualnetwork.publicip.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of public IP address space utilization above which alerts will be sent.", null),
 	PrivateIpCapacityThreshold("Alert", ManagementServer.class, Float.class, "pod.privateip.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of private IP address space utilization above which alerts will be sent.", null),
 	SecondaryStorageCapacityThreshold("Alert", ManagementServer.class, Float.class, "zone.secstorage.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of secondary storage utilization above which alerts will be sent about low storage available.", null),
 	VlanCapacityThreshold("Alert", ManagementServer.class, Float.class, "zone.vlan.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of Zone Vlan utilization above which alerts will be sent about low number of Zone Vlans.", null),
 	DirectNetworkPublicIpCapacityThreshold("Alert", ManagementServer.class, Float.class, "zone.directnetwork.publicip.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of Direct Network Public Ip Utilization above which alerts will be sent about low number of direct network public ips.", null),
 	LocalStorageCapacityThreshold("Alert", ManagementServer.class, Float.class, "cluster.localStorage.capacity.notificationthreshold", "0.75", "Percentage (as a value between 0 and 1) of local storage utilization above which alerts will be sent about low local storage available.", null),
-	StorageAllocatedCapacityDisableThreshold("Alert", ManagementServer.class, Float.class, "pool.storage.allocated.capacity.disablethreshold", "0.85", "Percentage (as a value between 0 and 1) of allocated storage utilization above which allocators will disable using the pool for low allocated storage available.", null, ConfigurationParameterScope.zone.toString()),
-	StorageCapacityDisableThreshold("Alert", ManagementServer.class, Float.class, "pool.storage.capacity.disablethreshold", "0.85", "Percentage (as a value between 0 and 1) of storage utilization above which allocators will disable using the pool for low storage available.", null, ConfigurationParameterScope.zone.toString()),
-	CPUCapacityDisableThreshold("Alert", ManagementServer.class, Float.class, "cluster.cpu.allocated.capacity.disablethreshold", "0.85", "Percentage (as a value between 0 and 1) of cpu utilization above which allocators will disable using the cluster for low cpu available. Keep the corresponding notification threshold lower than this to be notified beforehand.", null, ConfigurationParameterScope.cluster.toString()),
-	MemoryCapacityDisableThreshold("Alert", ManagementServer.class, Float.class, "cluster.memory.allocated.capacity.disablethreshold", "0.85", "Percentage (as a value between 0 and 1) of memory utilization above which allocators will disable using the cluster for low memory available. Keep the corresponding notification threshold lower than this to be notified beforehand.", null, ConfigurationParameterScope.cluster.toString()),
+	CPUCapacityDisableThreshold("Alert", ManagementServer.class, Float.class, "cluster.cpu.allocated.capacity.disablethreshold", "0.85", "Percentage (as a value between 0 and 1) of cpu utilization above which allocators will disable using the cluster for low cpu available. Keep the corresponding notification threshold lower than this to be notified beforehand.", null, ConfigKey.Scope.Cluster.toString()),
+	MemoryCapacityDisableThreshold("Alert", ManagementServer.class, Float.class, "cluster.memory.allocated.capacity.disablethreshold", "0.85", "Percentage (as a value between 0 and 1) of memory utilization above which allocators will disable using the cluster for low memory available. Keep the corresponding notification threshold lower than this to be notified beforehand.", null, ConfigKey.Scope.Cluster.toString()),
 
 
 	// Storage
 
-	StorageOverprovisioningFactor("Storage", StoragePoolAllocator.class, String.class, "storage.overprovisioning.factor", "2", "Used for storage overprovisioning calculation; available storage will be (actualStorageSize * storage.overprovisioning.factor)", null, ConfigurationParameterScope.zone.toString()),
 	StorageStatsInterval("Storage", ManagementServer.class, String.class, "storage.stats.interval", "60000", "The interval (in milliseconds) when storage stats (per host) are retrieved from agents.", null),
 	MaxVolumeSize("Storage", ManagementServer.class, Integer.class, "storage.max.volume.size", "2000", "The maximum size for a volume (in GB).", null),
     StorageCacheReplacementLRUTimeInterval("Storage", ManagementServer.class, Integer.class, "storage.cache.replacement.lru.interval", "30", "time interval for unused data on cache storage (in days).", null),
@@ -96,13 +90,10 @@ public enum Config {
 
 	GuestVlanBits("Network", ManagementServer.class, Integer.class, "guest.vlan.bits", "12", "The number of bits to reserve for the VLAN identifier in the guest subnet.", null),
 	//MulticastThrottlingRate("Network", ManagementServer.class, Integer.class, "multicast.throttling.rate", "10", "Default multicast rate in megabits per second allowed.", null),
-	NetworkThrottlingRate("Network", ManagementServer.class, Integer.class, "network.throttling.rate", "200", "Default data transfer rate in megabits per second allowed in network.", null, ConfigurationParameterScope.zone.toString()),
-	GuestDomainSuffix("Network", AgentManager.class, String.class, "guest.domain.suffix", "cloud.internal", "Default domain name for vms inside virtualized networks fronted by router", null, ConfigurationParameterScope.zone.toString()),
 	DirectNetworkNoDefaultRoute("Network", ManagementServer.class, Boolean.class, "direct.network.no.default.route", "false", "Direct Network Dhcp Server should not send a default route", "true/false"),
 	OvsTunnelNetwork("Network", ManagementServer.class, Boolean.class, "sdn.ovs.controller", "false", "Enable/Disable Open vSwitch SDN controller for L2-in-L3 overlay networks", null),
 	OvsTunnelNetworkDefaultLabel("Network", ManagementServer.class, String.class, "sdn.ovs.controller.default.label", "cloud-public", "Default network label to be used when fetching interface for GRE endpoints", null),
 	VmNetworkThrottlingRate("Network", ManagementServer.class, Integer.class, "vm.network.throttling.rate", "200", "Default data transfer rate in megabits per second allowed in User vm's default network.", null),
-	NetworkLockTimeout("Network", ManagementServer.class, Integer.class, "network.lock.timeout", "600", "Lock wait timeout (seconds) while implementing network", null),
 
 	SecurityGroupWorkCleanupInterval("Network", ManagementServer.class, Integer.class, "network.securitygroups.work.cleanup.interval", "120", "Time interval (seconds) in which finished work is cleaned up from the work table", null),
 	SecurityGroupWorkerThreads("Network", ManagementServer.class, Integer.class, "network.securitygroups.workers.pool.size", "50", "Number of worker threads processing the security group update work queue", null),
@@ -111,11 +102,10 @@ public enum Config {
 
 	SecurityGroupDefaultAdding("Network", ManagementServer.class, Boolean.class, "network.securitygroups.defaultadding", "true", "If true, the user VM would be added to the default security group by default", null),
 
-	GuestOSNeedGatewayOnNonDefaultNetwork("Network", NetworkManager.class, String.class, "network.dhcp.nondefaultnetwork.setgateway.guestos", "Windows", "The guest OS's name start with this fields would result in DHCP server response gateway information even when the network it's on is not default network. Names are separated by comma.", null),
+	GuestOSNeedGatewayOnNonDefaultNetwork("Network", NetworkOrchestrationService.class, String.class, "network.dhcp.nondefaultnetwork.setgateway.guestos", "Windows", "The guest OS's name start with this fields would result in DHCP server response gateway information even when the network it's on is not default network. Names are separated by comma.", null),
 
 	//VPN
 	RemoteAccessVpnPskLength("Network", AgentManager.class, Integer.class, "remote.access.vpn.psk.length", "24", "The length of the ipsec preshared key (minimum 8, maximum 256)", null),
-	RemoteAccessVpnClientIpRange("Network", AgentManager.class, String.class, "remote.access.vpn.client.iprange", "10.1.2.1-10.1.2.8", "The range of ips to be allocated to remote access vpn clients. The first ip in the range is used by the VPN server", null, ConfigurationParameterScope.account.toString()),
 	RemoteAccessVpnUserLimit("Network", AgentManager.class, String.class, "remote.access.vpn.user.limit", "8", "The maximum number of VPN users that can be created per account", null),
 	Site2SiteVpnConnectionPerVpnGatewayLimit("Network", ManagementServer.class, Integer.class, "site2site.vpn.vpngateway.connection.limit", "4", "The maximum number of VPN connection per VPN gateway", null),
 	Site2SiteVpnSubnetsPerCustomerGatewayLimit("Network", ManagementServer.class, Integer.class, "site2site.vpn.customergateway.subnets.limit", "10", "The maximum number of subnets per customer gateway", null),
@@ -151,7 +141,6 @@ public enum Config {
     JobCancelThresholdMinutes("Advanced", ManagementServer.class, String.class, "job.cancel.threshold.minutes", "60", "Time (in minutes) for async-jobs to be forcely cancelled if it has been in process for long", null),
     EventPurgeInterval("Advanced", ManagementServer.class, Integer.class, "event.purge.interval", "86400", "The interval (in seconds) to wait before running the event purge thread", null),
 	AccountCleanupInterval("Advanced", ManagementServer.class, Integer.class, "account.cleanup.interval", "86400", "The interval (in seconds) between cleanup for removed accounts", null),
-	AllowPublicUserTemplates("Advanced", ManagementServer.class, Integer.class, "allow.public.user.templates", "true", "If false, users will not be able to create public templates.", null, ConfigurationParameterScope.account.toString()),
 	InstanceName("Advanced", AgentManager.class, String.class, "instance.name", "VM", "Name of the deployment instance.", "instanceName"),
 	ExpungeDelay("Advanced", UserVmManager.class, Integer.class, "expunge.delay", "86400", "Determines how long (in seconds) to wait before actually expunging destroyed vm. The default value = the default value of expunge.interval", null),
 	ExpungeInterval("Advanced", UserVmManager.class, Integer.class, "expunge.interval", "86400", "The interval (in seconds) to wait before running the expunge thread.", null),
@@ -164,29 +153,20 @@ public enum Config {
 	IntegrationAPIPort("Advanced", ManagementServer.class, Integer.class, "integration.api.port", null, "Defaul API port", null),
 	InvestigateRetryInterval("Advanced", HighAvailabilityManager.class, Integer.class, "investigate.retry.interval", "60", "Time (in seconds) between VM pings when agent is disconnected", null),
 	MigrateRetryInterval("Advanced", HighAvailabilityManager.class, Integer.class, "migrate.retry.interval", "120", "Time (in seconds) between migration retries", null),
-    ClusterDeltaSyncInterval("Advanced", AgentManager.class, Integer.class, "sync.interval", "60", "Cluster Delta sync interval in seconds", null),
-	RouterCpuMHz("Advanced", NetworkManager.class, Integer.class, "router.cpu.mhz", String.valueOf(VpcVirtualNetworkApplianceManager.DEFAULT_ROUTER_CPU_MHZ), "Default CPU speed (MHz) for router VM.", null),
+	RouterCpuMHz("Advanced", NetworkOrchestrationService.class, Integer.class, "router.cpu.mhz", String.valueOf(VpcVirtualNetworkApplianceManager.DEFAULT_ROUTER_CPU_MHZ), "Default CPU speed (MHz) for router VM.", null),
 	RestartRetryInterval("Advanced", HighAvailabilityManager.class, Integer.class, "restart.retry.interval", "600", "Time (in seconds) between retries to restart a vm", null),
-	RouterStatsInterval("Advanced", NetworkManager.class, Integer.class, "router.stats.interval", "300", "Interval (in seconds) to report router statistics.", null),
-	ExternalNetworkStatsInterval("Advanced", NetworkManager.class, Integer.class, "external.network.stats.interval", "300", "Interval (in seconds) to report external network statistics.", null),
-	RouterCheckInterval("Advanced", NetworkManager.class, Integer.class, "router.check.interval", "30", "Interval (in seconds) to report redundant router status.", null),
-	RouterCheckPoolSize("Advanced", NetworkManager.class, Integer.class, "router.check.poolsize", "10", "Numbers of threads using to check redundant router status.", null),
-    RouterTemplateXen("Advanced", NetworkManager.class, String.class, "router.template.xen", "SystemVM Template (XenServer)", "Name of the default router template on Xenserver.", null, ConfigurationParameterScope.zone.toString()),
-    RouterTemplateKVM("Advanced", NetworkManager.class, String.class, "router.template.kvm", "SystemVM Template (KVM)", "Name of the default router template on KVM.", null, ConfigurationParameterScope.zone.toString()),
-    RouterTemplateVmware("Advanced", NetworkManager.class, String.class, "router.template.vmware", "SystemVM Template (vSphere)", "Name of the default router template on Vmware.", null, ConfigurationParameterScope.zone.toString()),
-    RouterTemplateHyperv("Advanced", NetworkManager.class, String.class, "router.template.hyperv", "SystemVM Template (HyperV)", "Name of the default router template on Hyperv.", null, ConfigurationParameterScope.zone.toString()),
-    RouterTemplateLXC("Advanced", NetworkManager.class, String.class, "router.template.lxc", "SystemVM Template (LXC)", "Name of the default router template on LXC.", null, ConfigurationParameterScope.zone.toString()),
-    RouterExtraPublicNics("Advanced", NetworkManager.class, Integer.class, "router.extra.public.nics", "2", "specify extra public nics used for virtual router(up to 5)", "0-5"),
-	StartRetry("Advanced", AgentManager.class, Integer.class, "start.retry", "10", "Number of times to retry create and start commands", null),
-    EnableDynamicallyScaleVm("Advanced", ManagementServer.class, Boolean.class, "enable.dynamic.scale.vm", "false", "Enables/Diables dynamically scaling a vm", null, ConfigurationParameterScope.zone.toString()),
+	RouterStatsInterval("Advanced", NetworkOrchestrationService.class, Integer.class, "router.stats.interval", "300", "Interval (in seconds) to report router statistics.", null),
+	ExternalNetworkStatsInterval("Advanced", NetworkOrchestrationService.class, Integer.class, "external.network.stats.interval", "300", "Interval (in seconds) to report external network statistics.", null),
+	RouterCheckInterval("Advanced", NetworkOrchestrationService.class, Integer.class, "router.check.interval", "30", "Interval (in seconds) to report redundant router status.", null),
+	RouterCheckPoolSize("Advanced", NetworkOrchestrationService.class, Integer.class, "router.check.poolsize", "10", "Numbers of threads using to check redundant router status.", null),
+    RouterExtraPublicNics("Advanced", NetworkOrchestrationService.class, Integer.class, "router.extra.public.nics", "2", "specify extra public nics used for virtual router(up to 5)", "0-5"),
     ScaleRetry("Advanced", ManagementServer.class, Integer.class, "scale.retry", "2", "Number of times to retry scaling up the vm", null),
     StopRetryInterval("Advanced", HighAvailabilityManager.class, Integer.class, "stop.retry.interval", "600", "Time in seconds between retries to stop or destroy a vm" , null),
 	StorageCleanupInterval("Advanced", StorageManager.class, Integer.class, "storage.cleanup.interval", "86400", "The interval (in seconds) to wait before running the storage cleanup thread.", null),
 	StorageCleanupEnabled("Advanced", StorageManager.class, Boolean.class, "storage.cleanup.enabled", "true", "Enables/disables the storage cleanup thread.", null),
 	UpdateWait("Advanced", AgentManager.class, Integer.class, "update.wait", "600", "Time to wait (in seconds) before alerting on a updating agent", null),
-	Wait("Advanced", AgentManager.class, Integer.class, "wait", "1800", "Time in seconds to wait for control commands to return", null),
 	XapiWait("Advanced", AgentManager.class, Integer.class, "xapiwait", "600", "Time (in seconds) to wait for XAPI to return", null),
-	MigrateWait("Advanced", AgentManager.class, Integer.class, "migratewait", "3600", "Time (in seconds) to wait for VM migrate finish", null),
+    MigrateWait("Advanced", AgentManager.class, Integer.class, "migratewait", "3600", "Time (in seconds) to wait for VM migrate finish", null),
 	HAWorkers("Advanced", AgentManager.class, Integer.class, "ha.workers", "5", "Number of ha worker threads.", null),
 	MountParent("Advanced", ManagementServer.class, String.class, "mount.parent", "/var/cloudstack/mnt", "The mount point on the Management Server for Secondary Storage.", null),
 //	UpgradeURL("Advanced", ManagementServer.class, String.class, "upgrade.url", "http://example.com:8080/client/agent/update.zip", "The upgrade URL is the URL of the management server that agents will connect to in order to automatically upgrade.", null),
@@ -194,11 +174,8 @@ public enum Config {
     SystemVMAutoReserveCapacity("Advanced", ManagementServer.class, Boolean.class, "system.vm.auto.reserve.capacity", "true", "Indicates whether or not to automatically reserver system VM standby capacity.", null),
 	SystemVMDefaultHypervisor("Advanced", ManagementServer.class, String.class, "system.vm.default.hypervisor", null, "Hypervisor type used to create system vm", null),
     SystemVMRandomPassword("Advanced", ManagementServer.class, Boolean.class, "system.vm.random.password", "false", "Randomize system vm password the first time management server starts", null),
-	CPUOverprovisioningFactor("Advanced", ManagementServer.class, String.class, "cpu.overprovisioning.factor", "1", "Used for CPU overprovisioning calculation; available CPU will be (actualCpuCapacity * cpu.overprovisioning.factor)", null, ConfigurationParameterScope.cluster.toString()),
-	MemOverprovisioningFactor("Advanced", ManagementServer.class, String.class, "mem.overprovisioning.factor", "1", "Used for memory overprovisioning calculation", null, ConfigurationParameterScope.cluster.toString()),
 	LinkLocalIpNums("Advanced", ManagementServer.class, Integer.class, "linkLocalIp.nums", "10", "The number of link local ip that needed by domR(in power of 2)", null),
 	HypervisorList("Advanced", ManagementServer.class, String.class, "hypervisor.list", HypervisorType.Hyperv + "," + HypervisorType.KVM + "," + HypervisorType.XenServer + "," + HypervisorType.VMware + "," + HypervisorType.BareMetal + "," + HypervisorType.Ovm + "," + HypervisorType.LXC, "The list of hypervisors that this deployment will use.", "hypervisorList"),
-	ManagementHostIPAdr("Advanced", ManagementServer.class, String.class, "host", "localhost", "The ip address of management server", null),
 	ManagementNetwork("Advanced", ManagementServer.class, String.class, "management.network.cidr", null, "The cidr of management server network", null),
 	EventPurgeDelay("Advanced", ManagementServer.class, Integer.class, "event.purge.delay", "15", "Events older than specified number days will be purged. Set this value to 0 to never delete events", null),
 	SecStorageVmMTUSize("Advanced", AgentManager.class, Integer.class, "secstorage.vm.mtu.size", String.valueOf(SecondaryStorageVmManager.DEFAULT_SS_VM_MTUSIZE), "MTU size (in Byte) of storage network in secondary storage vms", null),
@@ -213,15 +190,6 @@ public enum Config {
     AlertPurgeInterval("Advanced", ManagementServer.class, Integer.class, "alert.purge.interval", "86400", "The interval (in seconds) to wait before running the alert purge thread", null),
     AlertPurgeDelay("Advanced", ManagementServer.class, Integer.class, "alert.purge.delay", "0", "Alerts older than specified number days will be purged. Set this value to 0 to never delete alerts", null),
     HostReservationReleasePeriod("Advanced", ManagementServer.class, Integer.class, "host.reservation.release.period", "300000", "The interval in milliseconds between host reservation release checks", null),
-    UseSystemPublicIps("Advanced", ManagementServer.class, Boolean.class, "use.system.public.ips", "true",
-            "If true, when account has dedicated public ip range(s), once the ips dedicated to the account have been" +
-            " consumed ips will be acquired from the system pool",
-            null, ConfigurationParameterScope.account.toString()),
-    UseSystemGuestVlans("Advanced", ManagementServer.class, Boolean.class, "use.system.guest.vlans", "true",
-                "If true, when account has dedicated guest vlan range(s), once the vlans dedicated to the account have been" +
-                " consumed vlans will be allocated from the system pool",
-                null, ConfigurationParameterScope.account.toString()),
-
     // LB HealthCheck Interval.
     LBHealthCheck("Advanced", ManagementServer.class, String.class, "healthcheck.update.interval", "600",
             "Time Interval to fetch the LB health check states (in sec)", null),
@@ -235,7 +203,6 @@ public enum Config {
 	VmStatsInterval("Advanced", ManagementServer.class, Integer.class, "vm.stats.interval", "60000", "The interval (in milliseconds) when vm stats are retrieved from agents.", null),
 	VmDiskStatsInterval("Advanced", ManagementServer.class, Integer.class, "vm.disk.stats.interval", "0", "Interval (in seconds) to report vm disk statistics.", null),
 	VmTransitionWaitInterval("Advanced", ManagementServer.class, Integer.class, "vm.tranisition.wait.interval", "3600", "Time (in seconds) to wait before taking over a VM in transition state", null),
-	VmDestroyForcestop("Advanced", ManagementServer.class, Boolean.class, "vm.destroy.forcestop", "false", "On destroy, force-stop takes this value ", null),
         VmDiskThrottlingIopsReadRate("Advanced", ManagementServer.class, Integer.class, "vm.disk.throttling.iops_read_rate", "0", "Default disk I/O read rate in requests per second allowed in User vm's disk.", null),
         VmDiskThrottlingIopsWriteRate("Advanced", ManagementServer.class, Integer.class, "vm.disk.throttling.iops_write_rate", "0", "Default disk I/O writerate in requests per second allowed in User vm's disk.", null),
         VmDiskThrottlingBytesReadRate("Advanced", ManagementServer.class, Integer.class, "vm.disk.throttling.bytes_read_rate", "0", "Default disk I/O read rate in bytes per second allowed in User vm's disk.", null),
@@ -259,7 +226,8 @@ public enum Config {
     EnableEC2API("Advanced", ManagementServer.class, Boolean.class, "enable.ec2.api", "false", "enable EC2 API on CloudStack", null),
     EnableS3API("Advanced", ManagementServer.class, Boolean.class, "enable.s3.api", "false", "enable Amazon S3 API on CloudStack", null),
     RecreateSystemVmEnabled("Advanced", ManagementServer.class, Boolean.class, "recreate.systemvm.enabled", "false", "If true, will recreate system vm root disk whenever starting system vm", "true,false"),
-    SetVmInternalNameUsingDisplayName("Advanced", ManagementServer.class, Boolean.class, "vm.instancename.flag", "false", "If true, will append guest VM's display Name (if set) to its internal instance name", "true,false"),
+    SetVmInternalNameUsingDisplayName("Advanced", ManagementServer.class, Boolean.class, "vm.instancename.flag", "false",
+            "If set to true, will set guest VM's name as it appears on the hypervisor, to its hostname", "true,false"),
     IncorrectLoginAttemptsAllowed("Advanced", ManagementServer.class, Integer.class, "incorrect.login.attempts.allowed", "5", "Incorrect login attempts allowed before the user is disabled", null),
     // Ovm
     OvmPublicNetwork("Hidden", ManagementServer.class, String.class, "ovm.public.network.device", null, "Specify the public bridge on host for public network", null),
@@ -271,7 +239,7 @@ public enum Config {
     XenStorageNetwork1("Hidden", ManagementServer.class, String.class, "xen.storage.network.device1", null, "Specify when there are storage networks", null),
     XenStorageNetwork2("Hidden", ManagementServer.class, String.class, "xen.storage.network.device2", null, "Specify when there are storage networks", null),
     XenPrivateNetwork("Hidden", ManagementServer.class, String.class, "xen.private.network.device", null, "Specify when the private network name is different", null),
-    NetworkGuestCidrLimit("Network", NetworkManager.class, Integer.class, "network.guest.cidr.limit", "22", "size limit for guest cidr; can't be less than this value", null),
+    NetworkGuestCidrLimit("Network", NetworkOrchestrationService.class, Integer.class, "network.guest.cidr.limit", "22", "size limit for guest cidr; can't be less than this value", null),
     XenSetupMultipath("Advanced", ManagementServer.class, String.class, "xen.setup.multipath", "false", "Setup the host to do multipath", null),
     XenBondStorageNic("Advanced", ManagementServer.class, String.class, "xen.bond.storage.nics", null, "Attempt to bond the two networks if found", null),
     XenHeartBeatInterval("Advanced", ManagementServer.class, Integer.class, "xen.heartbeat.interval", "60", "heartbeat to use when implementing XenServer Self Fencing", null),
@@ -281,7 +249,7 @@ public enum Config {
     VmwareUseNexusVSwitch("Network", ManagementServer.class, Boolean.class, "vmware.use.nexus.vswitch", "false", "Enable/Disable Cisco Nexus 1000v vSwitch in VMware environment", null),
     VmwareUseDVSwitch("Network", ManagementServer.class, Boolean.class, "vmware.use.dvswitch", "false", "Enable/Disable Nexus/Vmware dvSwitch in VMware environment", null),
     VmwarePortsPerDVPortGroup("Network", ManagementServer.class, Integer.class, "vmware.ports.per.dvportgroup", "256", "Default number of ports per Vmware dvPortGroup in VMware environment", null),
-    VmwareCreateFullClone("Advanced", ManagementServer.class, Boolean.class, "vmware.create.full.clone", "false", "If set to true, creates guest VMs as full clones on ESX", null),
+    VmwareCreateFullClone("Advanced", ManagementServer.class, Boolean.class, "vmware.create.full.clone", "true", "If set to true, creates guest VMs as full clones on ESX", null),
     VmwareServiceConsole("Advanced", ManagementServer.class, String.class, "vmware.service.console", "Service Console", "Specify the service console network name(for ESX hosts)", null),
     VmwareManagementPortGroup("Advanced", ManagementServer.class, String.class, "vmware.management.portgroup", "Management Network", "Specify the management network name(for ESXi hosts)", null),
     VmwareAdditionalVncPortRangeStart("Advanced", ManagementServer.class, Integer.class, "vmware.additional.vnc.portrange.start", "50000", "Start port number of additional VNC port range", null),
@@ -325,13 +293,7 @@ public enum Config {
 	HashKey("Hidden", ManagementServer.class, String.class, "security.hash.key", null, "for generic key-ed hash", null),
 	EncryptionKey("Hidden", ManagementServer.class, String.class, "security.encryption.key", null, "base64 encoded key data", null),
 	EncryptionIV("Hidden", ManagementServer.class, String.class, "security.encryption.iv", null, "base64 encoded IV data", null),
-	RouterRamSize("Hidden", NetworkManager.class, Integer.class, "router.ram.size", "128", "Default RAM for router VM (in MB).", null),
-
-	VmOpWaitInterval("Advanced", ManagementServer.class, Integer.class, "vm.op.wait.interval", "120", "Time (in seconds) to wait before checking if a previous operation has succeeded", null),
-	VmOpLockStateRetry("Advanced", ManagementServer.class, Integer.class, "vm.op.lock.state.retry", "5", "Times to retry locking the state of a VM for operations", "-1 means try forever"),
-	VmOpCleanupInterval("Advanced", ManagementServer.class, Long.class, "vm.op.cleanup.interval", "86400", "Interval to run the thread that cleans up the vm operations (in seconds)", "Seconds"),
-	VmOpCleanupWait("Advanced", ManagementServer.class, Long.class, "vm.op.cleanup.wait", "3600", "Time (in seconds) to wait before cleanuping up any vm work items", "Seconds"),
-	VmOpCancelInterval("Advanced", ManagementServer.class, Long.class, "vm.op.cancel.interval", "3600", "Time (in seconds) to wait before cancelling a operation", "Seconds"),
+	RouterRamSize("Hidden", NetworkOrchestrationService.class, Integer.class, "router.ram.size", "128", "Default RAM for router VM (in MB).", null),
 
 	DefaultPageSize("Advanced", ManagementServer.class, Long.class, "default.page.size", "500", "Default page size for API list* commands", null),
 
@@ -353,10 +315,9 @@ public enum Config {
 	ResourceCountCheckInterval("Advanced", ManagementServer.class, Long.class, "resourcecount.check.interval", "0", "Time (in seconds) to wait before retrying resource count check task. Default is 0 which is to never run the task", "Seconds"),
 
 	//disabling lb as cluster sync does not work with distributed cluster
-	SubDomainNetworkAccess("Advanced", NetworkManager.class, Boolean.class, "allow.subdomain.network.access", "true", "Allow subdomains to use networks dedicated to their parent domain(s)", null),
-	UseExternalDnsServers("Advanced", NetworkManager.class, Boolean.class, "use.external.dns", "false", "Bypass internal dns, use external dns1 and dns2", null, ConfigurationParameterScope.zone.toString()),
+	SubDomainNetworkAccess("Advanced", NetworkOrchestrationService.class, Boolean.class, "allow.subdomain.network.access", "true", "Allow subdomains to use networks dedicated to their parent domain(s)", null),
 	EncodeApiResponse("Advanced", ManagementServer.class, Boolean.class, "encode.api.response", "false", "Do URL encoding for the api response, false by default", null),
-	DnsBasicZoneUpdates("Advanced", NetworkManager.class, String.class, "network.dns.basiczone.updates", "all", "This parameter can take 2 values: all (default) and pod. It defines if DHCP/DNS requests have to be send to all dhcp servers in cloudstack, or only to the one in the same pod", "all,pod"),
+	DnsBasicZoneUpdates("Advanced", NetworkOrchestrationService.class, String.class, "network.dns.basiczone.updates", "all", "This parameter can take 2 values: all (default) and pod. It defines if DHCP/DNS requests have to be send to all dhcp servers in cloudstack, or only to the one in the same pod", "all,pod"),
 
 	ClusterMessageTimeOutSeconds("Advanced", ManagementServer.class, Integer.class, "cluster.message.timeout.seconds", "300", "Time (in seconds) to wait before a inter-management server message post times out.", null),
 	AgentLoadThreshold("Advanced", ManagementServer.class, Float.class, "agent.load.threshold", "0.7", "Percentage (as a value between 0 and 1) of connected agents after which agent load balancing will start happening", null),
@@ -435,12 +396,11 @@ public enum Config {
     CloudDnsName("Advanced", ManagementServer.class, String.class, "cloud.dns.name", null, "DNS name of the cloud for the GSLB service", null),
 
     BlacklistedRoutes("Advanced", VpcManager.class, String.class, "blacklisted.routes", null, "Routes that are blacklisted, can not be used for Static Routes creation for the VPC Private Gateway",
-	           "routes", ConfigurationParameterScope.zone.toString()),
-
+	           "routes", ConfigKey.Scope.Zone.toString()),
     InternalLbVmServiceOfferingId("Advanced", ManagementServer.class, String.class, "internallbvm.service.offering", null, "Uuid of the service offering used by internal lb vm; if NULL - default system internal lb offering will be used", null),
     ExecuteInSequence("Advanced", ManagementServer.class, Boolean.class, "execute.in.sequence.hypervisor.commands", "false", "If set to true, StartCommand, StopCommand, CopyCommand will be synchronized on the agent side." +
     		" If set to false, these commands become asynchronous. Default value is false.", null),
-    ExecuteInSequenceNetworkElementCommands("Advanced", NetworkManager.class, Boolean.class, "execute.in.sequence.network.element.commands", "false", "If set to true, DhcpEntryCommand, SavePasswordCommand, UserDataCommand, VmDataCommand will be synchronized on the agent side." +
+    ExecuteInSequenceNetworkElementCommands("Advanced", NetworkOrchestrationService.class, Boolean.class, "execute.in.sequence.network.element.commands", "false", "If set to true, DhcpEntryCommand, SavePasswordCommand, UserDataCommand, VmDataCommand will be synchronized on the agent side." +
             " If set to false, these commands become asynchronous. Default value is false.", null),
 
 	UCSSyncBladeInterval("Advanced", ManagementServer.class, Integer.class, "ucs.sync.blade.interval", "3600", "the interval cloudstack sync with UCS manager for available blades in case user remove blades from chassis without notifying CloudStack", null);
@@ -454,21 +414,13 @@ public enum Config {
     private final String _range;
     private final String _scope; // Parameter can be at different levels (Zone/cluster/pool/account), by default every parameter is at global
 
-    public static enum ConfigurationParameterScope {
-        global,
-        zone,
-        cluster,
-        storagepool,
-        account
-    }
-
     private static final HashMap<String, List<Config>> _scopeLevelConfigsMap = new HashMap<String, List<Config>>();
     static {
-        _scopeLevelConfigsMap.put(ConfigurationParameterScope.zone.toString(), new ArrayList<Config>());
-        _scopeLevelConfigsMap.put(ConfigurationParameterScope.cluster.toString(), new ArrayList<Config>());
-        _scopeLevelConfigsMap.put(ConfigurationParameterScope.storagepool.toString(), new ArrayList<Config>());
-        _scopeLevelConfigsMap.put(ConfigurationParameterScope.account.toString(), new ArrayList<Config>());
-        _scopeLevelConfigsMap.put(ConfigurationParameterScope.global.toString(), new ArrayList<Config>());
+        _scopeLevelConfigsMap.put(ConfigKey.Scope.Zone.toString(), new ArrayList<Config>());
+        _scopeLevelConfigsMap.put(ConfigKey.Scope.Cluster.toString(), new ArrayList<Config>());
+        _scopeLevelConfigsMap.put(ConfigKey.Scope.StoragePool.toString(), new ArrayList<Config>());
+        _scopeLevelConfigsMap.put(ConfigKey.Scope.Account.toString(), new ArrayList<Config>());
+        _scopeLevelConfigsMap.put(ConfigKey.Scope.Global.toString(), new ArrayList<Config>());
 
         for (Config c : Config.values()) {
             //Creating group of parameters per each level (zone/cluster/pool/account)
@@ -516,7 +468,7 @@ public enum Config {
     	_defaultValue = defaultValue;
     	_description = description;
     	_range = range;
-        _scope = ConfigurationParameterScope.global.toString();
+        _scope = ConfigKey.Scope.Global.toString();
     }
     private Config(String category, Class<?> componentClass, Class<?> type, String name, String defaultValue, String description, String range, String scope) {
         _category = category;
@@ -568,7 +520,7 @@ public enum Config {
             return "HighAvailabilityManager";
         } else if (_componentClass == StoragePoolAllocator.class) {
             return "StorageAllocator";
-        } else if (_componentClass == NetworkManager.class) {
+        } else if (_componentClass == NetworkOrchestrationService.class) {
             return "NetworkManager";
         } else if (_componentClass == StorageManager.class) {
             return "StorageManager";

@@ -30,6 +30,7 @@ import org.springframework.stereotype.Component;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.command.user.loadbalancer.ListApplicationLoadBalancersCmd;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.lb.ApplicationLoadBalancerRuleVO;
 import org.apache.cloudstack.lb.dao.ApplicationLoadBalancerRuleDao;
 
@@ -45,7 +46,6 @@ import com.cloud.network.IpAddressManager;
 import com.cloud.network.Network;
 import com.cloud.network.Network.Capability;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.network.dao.FirewallRulesDao;
@@ -54,6 +54,7 @@ import com.cloud.network.lb.LoadBalancingRule.LbDestination;
 import com.cloud.network.lb.LoadBalancingRule.LbHealthCheckPolicy;
 import com.cloud.network.lb.LoadBalancingRule.LbStickinessPolicy;
 import com.cloud.network.lb.LoadBalancingRulesManager;
+import com.cloud.network.lb.LoadBalancingRulesService;
 import com.cloud.network.rules.FirewallRule.State;
 import com.cloud.network.rules.LoadBalancerContainer.Scheme;
 import com.cloud.projects.Project.ListProjectResourcesCriteria;
@@ -86,9 +87,11 @@ public class ApplicationLoadBalancerManagerImpl extends ManagerBase implements A
     @Inject LoadBalancingRulesManager _lbMgr;
     @Inject FirewallRulesDao _firewallDao;
     @Inject ResourceTagDao _resourceTagDao;
-    @Inject NetworkManager _ntwkMgr;
+    @Inject NetworkOrchestrationService _ntwkMgr;
     @Inject
     IpAddressManager _ipAddrMgr;
+    @Inject
+    LoadBalancingRulesService _lbService;
     
     
     @Override
@@ -362,7 +365,7 @@ public class ApplicationLoadBalancerManagerImpl extends ManagerBase implements A
     
     @Override
     public boolean deleteApplicationLoadBalancer(long id) {
-        return _lbMgr.deleteLoadBalancerRule(id, true);
+        return _lbService.deleteLoadBalancerRule(id, true);
     }
 
     @Override

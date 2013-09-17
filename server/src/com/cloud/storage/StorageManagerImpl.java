@@ -146,7 +146,6 @@ import com.cloud.storage.listener.VolumeStateListener;
 import com.cloud.template.TemplateManager;
 import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
-import com.cloud.user.User;
 import com.cloud.user.dao.UserDao;
 import com.cloud.utils.NumbersUtil;
 import com.cloud.utils.Pair;
@@ -279,21 +278,11 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
     boolean _storageCleanupEnabled;
     boolean _templateCleanupEnabled = true;
     int _storageCleanupInterval;
-    private int _createVolumeFromSnapshotWait;
-    private int _copyvolumewait;
     int _storagePoolAcquisitionWaitSeconds = 1800; // 30 minutes
-    protected int _retry = 2;
-    protected int _pingInterval = 60; // seconds
-    protected int _hostRetry;
     // protected BigDecimal _overProvisioningFactor = new BigDecimal(1);
-    private long _maxVolumeSizeInGb;
     private long _serverId;
 
-    private int _customDiskOfferingMinSize = 1;
-    private int _customDiskOfferingMaxSize = 1024;
     private final Map<String, HypervisorHostListener> hostListeners = new HashMap<String, HypervisorHostListener>();
-
-    private boolean _recreateSystemVmEnabled;
 
     public boolean share(VMInstanceVO vm, List<VolumeVO> vols, HostVO host, boolean cancelPreviousShare) throws StorageUnavailableException {
 
@@ -444,9 +433,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
 
         Map<String, String> configs = _configDao.getConfiguration("management-server", params);
 
-        _retry = NumbersUtil.parseInt(configs.get(Config.StartRetry.key()), 10);
-        _pingInterval = NumbersUtil.parseInt(configs.get("ping.interval"), 60);
-        _hostRetry = NumbersUtil.parseInt(configs.get("host.retry"), 2);
         _storagePoolAcquisitionWaitSeconds = NumbersUtil.parseInt(configs.get("pool.acquisition.wait.seconds"), 1800);
         s_logger.info("pool.acquisition.wait.seconds is configured as " + _storagePoolAcquisitionWaitSeconds + " seconds");
 
@@ -455,16 +441,7 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
         String storageCleanupEnabled = configs.get("storage.cleanup.enabled");
         _storageCleanupEnabled = (storageCleanupEnabled == null) ? true : Boolean.parseBoolean(storageCleanupEnabled);
 
-        String value = _configDao.getValue(Config.CreateVolumeFromSnapshotWait.toString());
-        _createVolumeFromSnapshotWait = NumbersUtil.parseInt(value, Integer.parseInt(Config.CreateVolumeFromSnapshotWait.getDefaultValue()));
-
-        value = _configDao.getValue(Config.CopyVolumeWait.toString());
-        _copyvolumewait = NumbersUtil.parseInt(value, Integer.parseInt(Config.CopyVolumeWait.getDefaultValue()));
-
-        value = _configDao.getValue(Config.RecreateSystemVmEnabled.key());
-        _recreateSystemVmEnabled = Boolean.parseBoolean(value);
-
-        value = _configDao.getValue(Config.StorageTemplateCleanupEnabled.key());
+        String value = _configDao.getValue(Config.StorageTemplateCleanupEnabled.key());
         _templateCleanupEnabled = (value == null ? true : Boolean.parseBoolean(value));
 
         String time = configs.get("storage.cleanup.interval");
@@ -478,17 +455,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
         _executor = Executors.newScheduledThreadPool(wrks, new NamedThreadFactory("StorageManager-Scavenger"));
 
         _agentMgr.registerForHostEvents(ComponentContext.inject(LocalStoragePoolListener.class), true, false, false);
-
-        String maxVolumeSizeInGbString = _configDao.getValue("storage.max.volume.size");
-        _maxVolumeSizeInGb = NumbersUtil.parseLong(maxVolumeSizeInGbString, 2000);
-
-        String _customDiskOfferingMinSizeStr = _configDao.getValue(Config.CustomDiskOfferingMinSize.toString());
-        _customDiskOfferingMinSize = NumbersUtil.parseInt(_customDiskOfferingMinSizeStr,
-                Integer.parseInt(Config.CustomDiskOfferingMinSize.getDefaultValue()));
-
-        String _customDiskOfferingMaxSizeStr = _configDao.getValue(Config.CustomDiskOfferingMaxSize.toString());
-        _customDiskOfferingMaxSize = NumbersUtil.parseInt(_customDiskOfferingMaxSizeStr,
-                Integer.parseInt(Config.CustomDiskOfferingMaxSize.getDefaultValue()));
 
         _serverId = _msServer.getId();
 
@@ -603,7 +569,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
     }
 
     @Override
-    @SuppressWarnings("rawtypes")
     public PrimaryDataStoreInfo createPool(CreateStoragePoolCmd cmd) throws ResourceInUseException, IllegalArgumentException, UnknownHostException,
     ResourceUnavailableException {
         String providerName = cmd.getStorageProviderName();
@@ -893,8 +858,7 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
 
     @Override
     public BigDecimal getStorageOverProvisioningFactor(Long dcId) {
-        return new BigDecimal(_configServer.getConfigValue(Config.StorageOverprovisioningFactor.key(),
-                Config.ConfigurationParameterScope.zone.toString(), dcId));
+        return new BigDecimal(CapacityManager.StorageOverprovisioningFactor.valueIn(dcId));
     }
 
     @Override
@@ -1226,11 +1190,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
     @DB
     public PrimaryDataStoreInfo preparePrimaryStorageForMaintenance(Long primaryStorageId) throws ResourceUnavailableException,
     InsufficientCapacityException {
-        Long userId = CallContext.current().getCallingUserId();
-        User user = _userDao.findById(userId);
-        Account account = CallContext.current().getCallingAccount();
-
-        boolean restart = true;
         StoragePoolVO primaryStorage = null;
         primaryStorage = _storagePoolDao.findById(primaryStorageId);
 
@@ -1257,9 +1216,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
     @DB
     public PrimaryDataStoreInfo cancelPrimaryStorageForMaintenance(CancelPrimaryStorageMaintenanceCmd cmd) throws ResourceUnavailableException {
         Long primaryStorageId = cmd.getId();
-        Long userId = CallContext.current().getCallingUserId();
-        User user = _userDao.findById(userId);
-        Account account = CallContext.current().getCallingAccount();
         StoragePoolVO primaryStorage = null;
 
         primaryStorage = _storagePoolDao.findById(primaryStorageId);
@@ -1450,10 +1406,18 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
         try {
             uri = new URI(UriUtils.encodeURIComponent(newUrl));
             if (uri.getScheme() == null) {
-                throw new InvalidParameterValueException("uri.scheme is null " + newUrl + ", add nfs:// as a prefix");
+                throw new InvalidParameterValueException("uri.scheme is null " + newUrl + ", add nfs:// (or cifs://) as a prefix");
             } else if (uri.getScheme().equalsIgnoreCase("nfs")) {
                 if (uri.getHost() == null || uri.getHost().equalsIgnoreCase("") || uri.getPath() == null || uri.getPath().equalsIgnoreCase("")) {
                     throw new InvalidParameterValueException("Your host and/or path is wrong.  Make sure it's of the format nfs://hostname/path");
+                }
+            } else if (uri.getScheme().equalsIgnoreCase("cifs")) {
+                // Don't validate against a URI encoded URI.
+                URI cifsUri = new URI(newUrl);
+                String warnMsg = UriUtils.getCifsUriParametersProblems(cifsUri);
+                if (warnMsg != null)
+                {
+                    throw new InvalidParameterValueException(warnMsg);
                 }
             }
         } catch (URISyntaxException e) {
@@ -1503,8 +1467,7 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
 
     private boolean checkUsagedSpace(StoragePool pool) {
         StatsCollector sc = StatsCollector.getInstance();
-        double storageUsedThreshold = Double.parseDouble(_configServer.getConfigValue(Config.StorageCapacityDisableThreshold.key(),
-                Config.ConfigurationParameterScope.zone.toString(), pool.getDataCenterId()));
+        double storageUsedThreshold = CapacityManager.StorageCapacityDisableThreshold.valueIn(pool.getDataCenterId());
         if (sc != null) {
             long totalSize = pool.getCapacityBytes();
             StorageStats stats = sc.getStoragePoolStats(pool.getId());
@@ -1609,8 +1572,7 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
             totalOverProvCapacity = pool.getCapacityBytes();
         }
 
-        double storageAllocatedThreshold = Double.parseDouble(_configServer.getConfigValue(Config.StorageAllocatedCapacityDisableThreshold.key(),
-                Config.ConfigurationParameterScope.zone.toString(), pool.getDataCenterId()));
+        double storageAllocatedThreshold = CapacityManager.StorageAllocatedCapacityDisableThreshold.valueIn(pool.getDataCenterId());
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Checking pool: " + pool.getId() + " for volume allocation " + volumes.toString() + ", maxSize : " + totalOverProvCapacity
                     + ", totalAllocatedSize : " + allocatedSizeWithtemplate + ", askingSize : " + totalAskingSize + ", allocated disable threshold: "
@@ -1787,7 +1749,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
     @Override
     public boolean deleteImageStore(DeleteImageStoreCmd cmd) {
         long storeId = cmd.getId();
-        User caller = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
         // Verify that image store exists
         ImageStoreVO store = _imageStoreDao.findById(storeId);
         if (store == null) {
@@ -1898,7 +1859,6 @@ public class StorageManagerImpl extends ManagerBase implements StorageManager, C
     @Override
     public boolean deleteSecondaryStagingStore(DeleteSecondaryStagingStoreCmd cmd) {
         long storeId = cmd.getId();
-        User caller = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
         // Verify that cache store exists
         ImageStoreVO store = _imageStoreDao.findById(storeId);
         if (store == null) {

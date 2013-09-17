@@ -429,8 +429,9 @@ import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationSer
 import org.apache.cloudstack.engine.subsystem.api.storage.DataStoreManager;
 import org.apache.cloudstack.engine.subsystem.api.storage.StoragePoolAllocator;
 import org.apache.cloudstack.engine.subsystem.api.storage.VolumeDataFactory;
-import org.apache.cloudstack.framework.config.ConfigurationVO;
+import org.apache.cloudstack.framework.config.ConfigKey;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.framework.config.impl.ConfigurationVO;
 import org.apache.cloudstack.storage.datastore.db.ImageStoreDao;
 import org.apache.cloudstack.storage.datastore.db.ImageStoreVO;
 import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
@@ -452,6 +453,7 @@ import com.cloud.capacity.dao.CapacityDao;
 import com.cloud.capacity.dao.CapacityDaoImpl.SummedCapacity;
 import com.cloud.cluster.ClusterManager;
 import com.cloud.configuration.Config;
+import com.cloud.configuration.ConfigurationManager;
 import com.cloud.consoleproxy.ConsoleProxyManagementState;
 import com.cloud.consoleproxy.ConsoleProxyManager;
 import com.cloud.dc.AccountVlanMapVO;
@@ -702,6 +704,8 @@ public class ManagementServerImpl extends ManagerBase implements ManagementServe
     VolumeDataFactory _volFactory;
     @Inject
     AccountService _accountService;
+    @Inject
+    ConfigurationManager _configMgr;
 
     @Inject
     DeploymentPlanningManager _dpMgr;
@@ -1625,22 +1629,22 @@ public class ManagementServerImpl extends ManagerBase implements ManagementServe
         int paramCountCheck = 0;
 
         if (zoneId != null) {
-            scope = Config.ConfigurationParameterScope.zone.toString();
+            scope = ConfigKey.Scope.Zone.toString();
             id = zoneId;
             paramCountCheck++;
         }
         if (clusterId != null) {
-            scope = Config.ConfigurationParameterScope.cluster.toString();
+            scope = ConfigKey.Scope.Cluster.toString();
             id = clusterId;
             paramCountCheck++;
         }
         if (accountId != null) {
-            scope = Config.ConfigurationParameterScope.account.toString();
+            scope = ConfigKey.Scope.Account.toString();
             id = accountId;
             paramCountCheck++;
         }
         if (storagepoolId != null) {
-            scope = Config.ConfigurationParameterScope.storagepool.toString();
+            scope = ConfigKey.Scope.StoragePool.toString();
             id = storagepoolId;
             paramCountCheck++;
         }
@@ -3256,7 +3260,7 @@ public class ManagementServerImpl extends ManagerBase implements ManagementServe
 
         long diskOffMaxSize = Long.valueOf(_configDao.getValue(Config.CustomDiskOfferingMaxSize.key()));
 
-        String userPublicTemplateEnabled = _configServer.getConfigValue(Config.AllowPublicUserTemplates.key(), Config.ConfigurationParameterScope.account.toString(), caller.getId());
+        boolean userPublicTemplateEnabled = TemplateManager.AllowPublicUserTemplates.valueIn(caller.getId());
 
         // add some parameters UI needs to handle API throttling
         boolean apiLimitEnabled = Boolean.parseBoolean(_configDao.getValue(Config.ApiLimitEnabled.key()));
@@ -3271,8 +3275,7 @@ public class ManagementServerImpl extends ManagerBase implements ManagementServe
         }
 
         capabilities.put("securityGroupsEnabled", securityGroupsEnabled);
-        capabilities
-        .put("userPublicTemplateEnabled", (userPublicTemplateEnabled == null || userPublicTemplateEnabled.equals("false") ? false : true));
+        capabilities.put("userPublicTemplateEnabled", userPublicTemplateEnabled);
         capabilities.put("cloudStackVersion", getVersion());
         capabilities.put("supportELB", supportELB);
         capabilities.put("projectInviteRequired", _projectMgr.projectInviteRequired());

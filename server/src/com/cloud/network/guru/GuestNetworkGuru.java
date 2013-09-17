@@ -26,6 +26,9 @@ import javax.inject.Inject;
 import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+import org.apache.cloudstack.framework.config.ConfigKey;
+import org.apache.cloudstack.framework.config.Configurable;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 
 import com.cloud.configuration.Config;
@@ -46,7 +49,6 @@ import com.cloud.network.Network;
 import com.cloud.network.Network.Provider;
 import com.cloud.network.Network.Service;
 import com.cloud.network.Network.State;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkProfile;
 import com.cloud.network.Networks.AddressFormat;
@@ -78,10 +80,10 @@ import com.cloud.vm.VirtualMachineProfile;
 import com.cloud.vm.dao.NicDao;
 
 @Local(value = NetworkGuru.class)
-public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGuru {
+public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGuru, Configurable {
     private static final Logger s_logger = Logger.getLogger(GuestNetworkGuru.class);
     @Inject
-    protected NetworkManager _networkMgr;
+    protected NetworkOrchestrationService _networkMgr;
     @Inject
     protected NetworkModel _networkModel;
     @Inject
@@ -103,6 +105,10 @@ public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGur
     @Inject
     IpAddressManager _ipAddrMgr;
     Random _rand = new Random(System.currentTimeMillis());
+    
+    static final ConfigKey<Boolean> UseSystemGuestVlans = new ConfigKey<Boolean>("Advanced", Boolean.class, "use.system.guest.vlans", "true",
+        "If true, when account has dedicated guest vlan range(s), once the vlans dedicated to the account have been consumed vlans will be allocated from the system pool", false,
+        ConfigKey.Scope.Account);
 
     private static final TrafficType[] _trafficTypes = {TrafficType.Guest};
 
@@ -157,11 +163,6 @@ public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGur
     
     public IsolationMethod[] getIsolationMethods() {
         return _isolationMethods;
-    }
-
-    public boolean canUseSystemGuestVlan(long accountId) {
-        return Boolean.parseBoolean(_configServer.getConfigValue(Config.UseSystemGuestVlans.key(),
-            Config.ConfigurationParameterScope.account.toString(), accountId));
     }
 
     protected abstract boolean canHandle(NetworkOffering offering, final NetworkType networkType, PhysicalNetwork physicalNetwork);
@@ -269,8 +270,7 @@ public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGur
     protected void allocateVnet(Network network, NetworkVO implemented, long dcId,
     		long physicalNetworkId, String reservationId) throws InsufficientVirtualNetworkCapcityException {
         if (network.getBroadcastUri() == null) {
-            String vnet = _dcDao.allocateVnet(dcId, physicalNetworkId, network.getAccountId(), reservationId,
-                    canUseSystemGuestVlan(network.getAccountId()));
+            String vnet = _dcDao.allocateVnet(dcId, physicalNetworkId, network.getAccountId(), reservationId, UseSystemGuestVlans.valueIn(network.getAccountId()));
             if (vnet == null) {
                 throw new InsufficientVirtualNetworkCapcityException("Unable to allocate vnet as a " +
                 		"part of network " + network + " implement ", DataCenter.class, dcId);
@@ -424,7 +424,7 @@ public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGur
     }
 
     @Override
-    public boolean trash(Network network, NetworkOffering offering, Account owner) {
+    public boolean trash(Network network, NetworkOffering offering) {
         return true;
     }
 
@@ -433,5 +433,15 @@ public abstract class GuestNetworkGuru extends AdapterBase implements NetworkGur
         DataCenter dc = _dcDao.findById(networkProfile.getDataCenterId());
         networkProfile.setDns1(dc.getDns1());
         networkProfile.setDns2(dc.getDns2());
+    }
+
+    @Override
+    public String getConfigComponentName() {
+        return GuestNetworkGuru.class.getSimpleName();
+    }
+
+    @Override
+    public ConfigKey<?>[] getConfigKeys() {
+        return new ConfigKey<?>[] {UseSystemGuestVlans};
     }
 }

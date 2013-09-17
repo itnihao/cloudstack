@@ -24,6 +24,7 @@ import javax.inject.Inject;
 import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 
 import com.cloud.configuration.Config;
 import com.cloud.dc.DataCenter;
@@ -40,7 +41,6 @@ import com.cloud.network.IpAddressManager;
 import com.cloud.network.Network;
 import com.cloud.network.Network.GuestType;
 import com.cloud.network.Network.State;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.Networks.BroadcastDomainType;
 import com.cloud.network.PhysicalNetwork;
 import com.cloud.network.PhysicalNetwork.IsolationMethod;
@@ -66,7 +66,7 @@ import com.cloud.vm.VirtualMachineProfile;
 public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
     private static final Logger s_logger = Logger.getLogger(ExternalGuestNetworkGuru.class);
     @Inject
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Inject
     NetworkDao _networkDao;
     @Inject
@@ -139,10 +139,12 @@ public class ExternalGuestNetworkGuru extends GuestNetworkGuru {
         // Get a vlan tag
         int vlanTag;
         if (config.getBroadcastUri() == null) {
-            String vnet = _dcDao.allocateVnet(zone.getId(), config.getPhysicalNetworkId(), config.getAccountId(),
-                    context.getReservationId(), canUseSystemGuestVlan(config.getAccountId()));
+            String vnet = _dcDao.allocateVnet(zone.getId(), config.getPhysicalNetworkId(), config.getAccountId(), context.getReservationId(),
+                UseSystemGuestVlans.valueIn(config.getAccountId()));
 
             try {
+                // when supporting more types of networks this need to become
+//              int vlantag = Integer.parseInt(BroadcastDomainType.getValue(vnet));
                 vlanTag = Integer.parseInt(vnet);
             } catch (NumberFormatException e) {
                 throw new CloudRuntimeException("Obtained an invalid guest vlan tag. Exception: " + e.getMessage());

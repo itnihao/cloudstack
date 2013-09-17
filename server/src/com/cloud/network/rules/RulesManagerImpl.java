@@ -29,6 +29,7 @@ import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.command.user.firewall.ListPortForwardingRulesCmd;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 
 import com.cloud.configuration.ConfigurationManager;
 import com.cloud.domain.dao.DomainDao;
@@ -45,7 +46,6 @@ import com.cloud.network.IpAddress;
 import com.cloud.network.IpAddressManager;
 import com.cloud.network.Network;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.dao.FirewallRulesCidrsDao;
 import com.cloud.network.dao.FirewallRulesDao;
@@ -57,6 +57,7 @@ import com.cloud.network.rules.FirewallRule.FirewallRuleType;
 import com.cloud.network.rules.FirewallRule.Purpose;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
 import com.cloud.network.vpc.VpcManager;
+import com.cloud.network.vpc.VpcService;
 import com.cloud.offering.NetworkOffering;
 import com.cloud.projects.Project.ListProjectResourcesCriteria;
 import com.cloud.server.ResourceTag.TaggedResourceType;
@@ -115,7 +116,7 @@ public class RulesManagerImpl extends ManagerBase implements RulesManager, Rules
     @Inject
     AccountManager _accountMgr;
     @Inject
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Inject
     NetworkModel _networkModel;
     @Inject
@@ -140,6 +141,8 @@ public class RulesManagerImpl extends ManagerBase implements RulesManager, Rules
     NicSecondaryIpDao _nicSecondaryDao;
     @Inject
     LoadBalancerVMMapDao _loadBalancerVMMapDao;
+    @Inject
+    VpcService _vpcSvc;
 
     
     protected void checkIpAndUserVm(IpAddress ipAddress, UserVm userVm, Account caller, Boolean ignoreVmState) {
@@ -506,7 +509,7 @@ public class RulesManagerImpl extends ManagerBase implements RulesManager, Rules
 
                             // associate portable IP to vpc, if network is part of VPC
                             if (network.getVpcId() != null) {
-                                _vpcMgr.associateIPToVpc(ipId, network.getVpcId());
+                                _vpcSvc.associateIPToVpc(ipId, network.getVpcId());
                             }
 
                             // associate portable IP with guest network
@@ -840,12 +843,6 @@ public class RulesManagerImpl extends ManagerBase implements RulesManager, Rules
         Pair<List<PortForwardingRuleVO>, Integer> result = _portForwardingDao.searchAndCount(sc, filter);
         return new Pair<List<? extends PortForwardingRule>, Integer>(result.first(), result.second());
     }
-
-    @Override
-    public List<String> getSourceCidrs(long ruleId) {
-        return _firewallCidrsDao.getSourceCidrs(ruleId);
-    }
-
 
     protected boolean applyPortForwardingRules(long ipId, boolean continueOnError, Account caller) {
         List<PortForwardingRuleVO> rules = _portForwardingDao.listForApplication(ipId);
@@ -1278,16 +1275,6 @@ public class RulesManagerImpl extends ManagerBase implements RulesManager, Rules
             s_logger.warn("Failed to disable one to one nat for the ip address id" + ipId);
             return false;
         }
-    }
-
-    @Override
-    public PortForwardingRule getPortForwardigRule(long ruleId) {
-        return _portForwardingDao.findById(ruleId);
-    }
-
-    @Override
-    public FirewallRule getFirewallRule(long ruleId) {
-        return _firewallDao.findById(ruleId);
     }
 
     @Override

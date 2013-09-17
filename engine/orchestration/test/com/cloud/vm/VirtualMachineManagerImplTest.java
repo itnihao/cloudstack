@@ -38,7 +38,9 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 
 import org.apache.cloudstack.api.command.user.vm.RestoreVMCmd;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationService;
+import org.apache.cloudstack.framework.config.ConfigDepot;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolVO;
@@ -60,8 +62,6 @@ import com.cloud.agent.api.PrepareForMigrationCommand;
 import com.cloud.agent.api.ScaleVmAnswer;
 import com.cloud.agent.api.ScaleVmCommand;
 import com.cloud.capacity.CapacityManager;
-import com.cloud.configuration.Config;
-import com.cloud.configuration.ConfigurationManager;
 import com.cloud.dc.dao.ClusterDao;
 import com.cloud.dc.dao.DataCenterDao;
 import com.cloud.dc.dao.HostPodDao;
@@ -77,9 +77,7 @@ import com.cloud.host.dao.HostDao;
 import com.cloud.hypervisor.Hypervisor.HypervisorType;
 import com.cloud.hypervisor.HypervisorGuru;
 import com.cloud.hypervisor.HypervisorGuruManager;
-import com.cloud.network.NetworkManager;
 import com.cloud.offering.ServiceOffering;
-import com.cloud.server.ConfigurationServer;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.storage.DiskOfferingVO;
 import com.cloud.storage.StoragePool;
@@ -92,7 +90,6 @@ import com.cloud.storage.dao.StoragePoolHostDao;
 import com.cloud.storage.dao.VMTemplateDao;
 import com.cloud.storage.dao.VolumeDao;
 import com.cloud.user.Account;
-import com.cloud.user.AccountManager;
 import com.cloud.user.AccountVO;
 import com.cloud.user.UserVO;
 import com.cloud.user.dao.AccountDao;
@@ -115,10 +112,6 @@ public class VirtualMachineManagerImplTest {
     VolumeOrchestrationService _storageMgr;
     @Mock
     Account _account;
-    @Mock
-    AccountManager _accountMgr;
-    @Mock
-    ConfigurationManager _configMgr;
     @Mock
     CapacityManager _capacityMgr;
     @Mock
@@ -162,8 +155,6 @@ public class VirtualMachineManagerImplTest {
     @Mock
     ItWorkVO _work;
     @Mock
-    ConfigurationServer _configServer;
-    @Mock
     HostVO hostVO;
     @Mock
     UserVmDetailVO _vmDetailVO;
@@ -183,7 +174,7 @@ public class VirtualMachineManagerImplTest {
     @Mock
     StoragePoolHostDao _poolHostDao;
     @Mock
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Mock
     HypervisorGuruManager _hvGuruMgr;
     @Mock
@@ -204,6 +195,8 @@ public class VirtualMachineManagerImplTest {
     Map<Volume, StoragePool> _volumeToPoolMock;
     @Mock
     EntityManager _entityMgr;
+    @Mock
+    ConfigDepot _configDepot;
 
     @Before
     public void setup() {
@@ -212,9 +205,6 @@ public class VirtualMachineManagerImplTest {
         _vmMgr._templateDao = _templateDao;
         _vmMgr._volsDao = _volsDao;
         _vmMgr.volumeMgr = _storageMgr;
-        _vmMgr._accountDao = _accountDao;
-        _vmMgr._accountMgr = _accountMgr;
-        _vmMgr._configMgr = _configMgr;
         _vmMgr._capacityMgr = _capacityMgr;
         _vmMgr._hostDao = _hostDao;
         _vmMgr._nodeId = 1L;
@@ -230,9 +220,9 @@ public class VirtualMachineManagerImplTest {
         _vmMgr._hvGuruMgr = _hvGuruMgr;
         _vmMgr._vmSnapshotMgr = _vmSnapshotMgr;
         _vmMgr._vmDao = _vmInstanceDao;
-        _vmMgr._configServer = _configServer;
         _vmMgr._uservmDetailsDao = _vmDetailsDao;
         _vmMgr._entityMgr = _entityMgr;
+        _vmMgr._configDepot = _configDepot;
 
         when(_vmMock.getId()).thenReturn(314l);
         when(_vmInstance.getId()).thenReturn(1L);
@@ -277,9 +267,7 @@ public class VirtualMachineManagerImplTest {
         doReturn(hostVO).when(_hostDao).findById(1L);
         doReturn(1L).when(_vmInstance).getDataCenterId();
         doReturn(1L).when(hostVO).getClusterId();
-        when(_configServer.getConfigValue(Config.EnableDynamicallyScaleVm.key(), Config.ConfigurationParameterScope.zone.toString(), 1L)).thenReturn("true");
-        when(_configServer.getConfigValue(Config.MemOverprovisioningFactor.key(), Config.ConfigurationParameterScope.cluster.toString(), 1L)).thenReturn("1.0");
-        when(_configServer.getConfigValue(Config.CPUOverprovisioningFactor.key(), Config.ConfigurationParameterScope.cluster.toString(), 1L)).thenReturn("1.0");
+        when(CapacityManager.CpuOverprovisioningFactor.valueIn(1L)).thenReturn(1.0f);
         ScaleVmCommand reconfigureCmd = new ScaleVmCommand("myVmName", newServiceOffering.getCpu(),
                 newServiceOffering.getSpeed(), newServiceOffering.getSpeed(), newServiceOffering.getRamSize(), newServiceOffering.getRamSize(),
                 newServiceOffering.getLimitCpuUse());
@@ -355,8 +343,8 @@ public class VirtualMachineManagerImplTest {
 
         // Mock the vm guru and the user vm object that gets returned.
         _vmMgr._vmGurus = new HashMap<VirtualMachine.Type, VirtualMachineGuru>();
-        UserVmManagerImpl userVmManager = mock(UserVmManagerImpl.class);
-        _vmMgr.registerGuru(VirtualMachine.Type.User, userVmManager);
+//        UserVmManagerImpl userVmManager = mock(UserVmManagerImpl.class);
+//        _vmMgr.registerGuru(VirtualMachine.Type.User, userVmManager);
 
         // Mock the iteration over all the volumes of an instance.
         Iterator<VolumeVO> volumeIterator = mock(Iterator.class);

@@ -40,7 +40,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.cloudstack</groupId>
-      <artifactId>cloud-engine-components-api</artifactId>
+      <artifactId>cloud-framework-config</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -49,9 +49,4 @@
       <version>${project.version}</version>
     </dependency>
   </dependencies>
-  <build>
-    <defaultGoal>install</defaultGoal>
-    <sourceDirectory>src</sourceDirectory>
-    <testSourceDirectory>test</testSourceDirectory>
-  </build>
 </project>

@@ -51,6 +51,7 @@ import org.apache.cloudstack.api.command.user.network.ListNetworksCmd;
 import org.apache.cloudstack.api.command.user.network.RestartNetworkCmd;
 import org.apache.cloudstack.api.command.user.vm.ListNicsCmd;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.network.element.InternalLoadBalancerElementService;
 
@@ -190,9 +191,6 @@ public class NetworkServiceImpl extends ManagerBase implements  NetworkService {
     private static final long MAX_GRE_KEY = 4294967295L; // 2^32 -1
 
     @Inject
-    EntityManager _entityMgr;
-
-    @Inject
     DataCenterDao _dcDao = null;
     @Inject
     VlanDao _vlanDao = null;
@@ -267,7 +265,7 @@ public class NetworkServiceImpl extends ManagerBase implements  NetworkService {
     @Inject
     ResourceTagDao _resourceTagDao;
     @Inject
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Inject
     NetworkModel _networkModel;
 
@@ -292,6 +290,8 @@ public class NetworkServiceImpl extends ManagerBase implements  NetworkService {
     NetworkACLDao _networkACLDao;
     @Inject
     IpAddressManager _ipAddrMgr;
+    @Inject
+    EntityManager _entityMgr;
 
     int _cidrLimit;
     boolean _allowSubdomainNetworkAccess;
@@ -1929,7 +1929,7 @@ public class NetworkServiceImpl extends ManagerBase implements  NetworkService {
 
         //perform below validation if the network is vpc network
         if (network.getVpcId() != null && networkOfferingId != null) {
-            Vpc vpc = _vpcMgr.getVpc(network.getVpcId());
+            Vpc vpc = _entityMgr.findById(Vpc.class, network.getVpcId());
             _vpcMgr.validateNtwkOffForNtwkInVpc(networkId, networkOfferingId, null, null, vpc, null, _accountMgr.getAccount(network.getAccountId()), null);
         }
 

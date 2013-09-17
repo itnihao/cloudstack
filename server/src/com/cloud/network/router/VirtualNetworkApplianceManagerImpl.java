@@ -46,6 +46,9 @@ import org.apache.log4j.Logger;
 import org.apache.cloudstack.api.command.admin.router.UpgradeRouterCmd;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.context.ServerContexts;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+import org.apache.cloudstack.framework.config.ConfigDepot;
+import org.apache.cloudstack.framework.config.ConfigKey;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.utils.identity.ManagementServerNode;
 
@@ -93,6 +96,7 @@ import com.cloud.agent.api.to.PortForwardingRuleTO;
 import com.cloud.agent.api.to.StaticNatRuleTO;
 import com.cloud.agent.manager.Commands;
 import com.cloud.alert.AlertManager;
+import com.cloud.cluster.ClusterManager;
 import com.cloud.cluster.ManagementServerHostVO;
 import com.cloud.cluster.dao.ManagementServerHostDao;
 import com.cloud.configuration.Config;
@@ -138,7 +142,6 @@ import com.cloud.network.Network;
 import com.cloud.network.Network.GuestType;
 import com.cloud.network.Network.Provider;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.Networks.BroadcastDomainType;
@@ -314,7 +317,7 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
     @Inject
     GuestOSDao _guestOSDao = null;
     @Inject
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Inject
     NetworkModel _networkModel;
     @Inject
@@ -363,13 +366,14 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
     NetworkService _networkSvc;
     @Inject
     IpAddressManager _ipAddrMgr;
+    @Inject
+    ConfigDepot _configDepot;
 
     
     int _routerRamSize;
     int _routerCpuMHz;
     int _retry = 2;
     String _instance;
-    String _mgmt_host;
     String _mgmt_cidr;
 
     int _routerStatsInterval = 300;
@@ -634,7 +638,8 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
             throw new CloudRuntimeException("Failed to reboot router " + router);
         }
     }
-
+    static final ConfigKey<Boolean> UseExternalDnsServers = new ConfigKey<Boolean>(Boolean.class, "use.external.dns", "Advanced", "false",
+        "Bypass internal dns, use external dns1 and dns2", true, ConfigKey.Scope.Zone, null);
     @Override
     public boolean configure(final String name, final Map<String, Object> params) throws ConfigurationException {
 
@@ -644,7 +649,6 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
 
         final Map<String, String> configs = _configDao.getConfiguration("AgentManager", params);
 
-        _mgmt_host = configs.get("host");
         _routerRamSize = NumbersUtil.parseInt(configs.get("router.ram.size"), DEFAULT_ROUTER_VM_RAMSIZE);
         _routerCpuMHz = NumbersUtil.parseInt(configs.get("router.cpu.mhz"), DEFAULT_ROUTER_CPU_MHZ);
 
@@ -1426,7 +1430,7 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
             InsufficientCapacityException, ResourceUnavailableException {
 
         List<DomainRouterVO> routers = new ArrayList<DomainRouterVO>();
-        Network lock = _networkDao.acquireInLockTable(guestNetwork.getId(), _networkMgr.getNetworkLockTimeout());
+        Network lock = _networkDao.acquireInLockTable(guestNetwork.getId(), NetworkOrchestrationService.NetworkLockTimeout.value());
         if (lock == null) {
             throw new ConcurrentOperationException("Unable to lock network " + guestNetwork.getId());
         }
@@ -1621,19 +1625,19 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
                 String templateName = null;
                 switch (hType) {
                     case XenServer:
-                        templateName = _configServer.getConfigValue(Config.RouterTemplateXen.key(), Config.ConfigurationParameterScope.zone.toString(), dest.getDataCenter().getId());
+                        templateName = RouterTemplateXen.valueIn(dest.getDataCenter().getId());
                         break;
                     case KVM:
-                        templateName = _configServer.getConfigValue(Config.RouterTemplateKVM.key(), Config.ConfigurationParameterScope.zone.toString(), dest.getDataCenter().getId());
+                        templateName = RouterTemplateKvm.valueIn(dest.getDataCenter().getId());
                         break;
                     case VMware:
-                        templateName = _configServer.getConfigValue(Config.RouterTemplateVmware.key(), Config.ConfigurationParameterScope.zone.toString(), dest.getDataCenter().getId());
+                        templateName = RouterTemplateVmware.valueIn(dest.getDataCenter().getId());
                         break;
                     case Hyperv:
-                        templateName = _configServer.getConfigValue(Config.RouterTemplateHyperv.key(), Config.ConfigurationParameterScope.zone.toString(), dest.getDataCenter().getId());
+                        templateName = RouterTemplateHyperV.valueIn(dest.getDataCenter().getId());
                         break;
                     case LXC:
-                        templateName = _configServer.getConfigValue(Config.RouterTemplateLXC.key(), Config.ConfigurationParameterScope.zone.toString(), dest.getDataCenter().getId());
+                        templateName = RouterTemplateLxc.valueIn(dest.getDataCenter().getId());
                         break;
                     default: break;
                 }
@@ -2055,11 +2059,8 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
                 controlNic = nic;
                 // DOMR control command is sent over management server in VMware
                 if (dest.getHost().getHypervisorType() == HypervisorType.VMware) {
-                    if (s_logger.isInfoEnabled()) {
-                        s_logger.info("Check if we need to add management server explicit route to DomR. pod cidr: "
-                    + dest.getPod().getCidrAddress() + "/" + dest.getPod().getCidrSize()
-                                + ", pod gateway: " + dest.getPod().getGateway() + ", management host: " + _mgmt_host);
-                    }
+                    s_logger.info("Check if we need to add management server explicit route to DomR. pod cidr: " + dest.getPod().getCidrAddress() + "/" +
+                                  dest.getPod().getCidrSize() + ", pod gateway: " + dest.getPod().getGateway() + ", management host: " + ClusterManager.ManagementHostIPAdr.value());
 
                     if (s_logger.isInfoEnabled()) {
                         s_logger.info("Add management server explicit route to DomR.");
@@ -2151,10 +2152,7 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
 
             boolean useExtDns = !dnsProvided;
             /* For backward compatibility */
-            String use_external_dns = _configServer.getConfigValue(Config.UseExternalDnsServers.key(), Config.ConfigurationParameterScope.zone.toString(), dc.getId());
-            if (use_external_dns != null && use_external_dns.equals("true")) {
-                useExtDns = true;
-            }
+            useExtDns = UseExternalDnsServers.valueIn(dc.getId());
 
             if (useExtDns) {
                 buf.append(" useextdns=true");
@@ -3384,12 +3382,7 @@ public class VirtualNetworkApplianceManagerImpl extends ManagerBase implements V
 
         // password should be set only on default network element
         if (password != null && nic.isDefaultNic()) {
-            String encodedPassword = PasswordGenerator.rot13(password);
-            // We would unset password for BACKUP router in the RvR, to prevent user from accidently reset the
-            // password again after BACKUP become MASTER
-            if (router.getIsRedundantRouter() && router.getRedundantState() != RedundantState.MASTER) {
-            	encodedPassword = PasswordGenerator.rot13("saved_password");
-            }
+            final String encodedPassword = PasswordGenerator.rot13(password);
             SavePasswordCommand cmd = new SavePasswordCommand(encodedPassword, nic.getIp4Address(), profile.getVirtualMachine().getHostName(), _networkModel.getExecuteInSeqNtwkElmtCmd());
             cmd.setAccessDetail(NetworkElementCommand.ROUTER_IP, getRouterControlIp(router.getId()));
             cmd.setAccessDetail(NetworkElementCommand.ROUTER_GUEST_IP, getRouterIpInNetwork(nic.getNetworkId(), router.getId()));

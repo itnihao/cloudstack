@@ -68,12 +68,6 @@ def add_netscaler(apiclient, zoneid, NSservice):
     if isinstance(physical_networks, list):
        physical_network = physical_networks[0]
 
-    netscaler = NetScaler.add(
-                    apiclient,
-                    NSservice,
-                    physicalnetworkid=physical_network.id
-                    )
-
     cmd = listNetworkServiceProviders.listNetworkServiceProvidersCmd()
     cmd.name = 'Netscaler'
     cmd.physicalnetworkid=physical_network.id
@@ -81,6 +75,17 @@ def add_netscaler(apiclient, zoneid, NSservice):
 
     if isinstance(nw_service_providers, list):
         netscaler_provider = nw_service_providers[0]
+    else:
+        cmd1 = addNetworkServiceProvider.addNetworkServiceProviderCmd()
+        cmd1.name = 'Netscaler'
+        cmd1.physicalnetworkid = physical_network.id
+        netscaler_provider = apiclient.addNetworkServiceProvider(cmd1)
+
+    netscaler = NetScaler.add(
+                    apiclient,
+                    NSservice,
+                    physicalnetworkid=physical_network.id
+                    )
     if netscaler_provider.state != 'Enabled':
       cmd = updateNetworkServiceProvider.updateNetworkServiceProviderCmd()
       cmd.id = netscaler_provider.id
@@ -681,3 +686,38 @@ def get_resource_type(resource_id):
                  }
 
         return lookup[resource_id]
+
+def get_portable_ip_range_services(config):
+    """ Reads config values related to portable ip and fills up
+    services accordingly"""
+
+    services = {}
+    attributeError = False
+
+    if config.portableIpRange.startip:
+        services["startip"] = config.portableIpRange.startip
+    else:
+        attributeError = True
+
+    if config.portableIpRange.endip:
+        services["endip"] = config.portableIpRange.endip
+    else:
+        attributeError = True
+
+    if config.portableIpRange.netmask:
+        services["netmask"] = config.portableIpRange.netmask
+    else:
+        attributeError = True
+
+    if config.portableIpRange.gateway:
+        services["gateway"] = config.portableIpRange.gateway
+    else:
+        attributeError = True
+
+    if config.portableIpRange.vlan:
+        services["vlan"] = config.portableIpRange.vlan
+
+    if attributeError:
+        services = None
+
+    return services

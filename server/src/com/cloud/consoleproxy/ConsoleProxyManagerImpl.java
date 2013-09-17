@@ -34,6 +34,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolVO;
@@ -83,7 +84,6 @@ import com.cloud.keystore.KeystoreDao;
 import com.cloud.keystore.KeystoreManager;
 import com.cloud.keystore.KeystoreVO;
 import com.cloud.network.Network;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.network.dao.IPAddressDao;
@@ -165,7 +165,6 @@ VirtualMachineGuru, SystemVmLoadScanHandler<Long>, ResourceStateAdapter {
 
     private int _consoleProxyPort = ConsoleProxyManager.DEFAULT_PROXY_VNC_PORT;
 
-    private String _mgmt_host;
     private int _mgmt_port = 8250;
 
     @Inject
@@ -194,7 +193,7 @@ VirtualMachineGuru, SystemVmLoadScanHandler<Long>, ResourceStateAdapter {
     @Inject
     private StorageManager _storageMgr;
     @Inject
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Inject
     NetworkModel _networkModel;
     @Inject
@@ -995,7 +994,7 @@ VirtualMachineGuru, SystemVmLoadScanHandler<Long>, ResourceStateAdapter {
 
     private synchronized Map<Long, ZoneHostInfo> getZoneHostInfo() {
         Date cutTime = DateUtil.currentGMTTime();
-        List<RunningHostCountInfo> l = _hostDao.getRunningHostCounts(new Date(cutTime.getTime() - _clusterMgr.getHeartbeatThreshold()));
+        List<RunningHostCountInfo> l = _hostDao.getRunningHostCounts(new Date(cutTime.getTime() - ClusterManager.HeartbeatThreshold.value()));
 
         RunningHostInfoAgregator aggregator = new RunningHostInfoAgregator();
         if (l.size() > 0) {
@@ -1267,10 +1266,6 @@ VirtualMachineGuru, SystemVmLoadScanHandler<Long>, ResourceStateAdapter {
         prepareDefaultCertificate();
 
         Map<String, String> agentMgrConfigs = _configDao.getConfiguration("AgentManager", params);
-        _mgmt_host = agentMgrConfigs.get("host");
-        if (_mgmt_host == null) {
-            s_logger.warn("Critical warning! Please configure your management server host address right after you have started your management server and then restart it, otherwise you won't be able to do console access");
-        }
 
         value = agentMgrConfigs.get("port");
         _mgmt_port = NumbersUtil.parseInt(value, 8250);
@@ -1342,7 +1337,7 @@ VirtualMachineGuru, SystemVmLoadScanHandler<Long>, ResourceStateAdapter {
 
         StringBuilder buf = profile.getBootArgsBuilder();
         buf.append(" template=domP type=consoleproxy");
-        buf.append(" host=").append(_mgmt_host);
+        buf.append(" host=").append(ClusterManager.ManagementHostIPAdr.value());
         buf.append(" port=").append(_mgmt_port);
         buf.append(" name=").append(profile.getVirtualMachine().getHostName());
         if (_sslEnabled) {

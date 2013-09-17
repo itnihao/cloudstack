@@ -29,9 +29,11 @@ import javax.inject.Inject;
 
 import org.apache.log4j.Logger;
 import org.springframework.stereotype.Component;
-
+import org.apache.cloudstack.acl.ControlledEntity.ACLType;
+import org.apache.cloudstack.affinity.AffinityGroupDomainMapVO;
 import org.apache.cloudstack.affinity.AffinityGroupResponse;
 import org.apache.cloudstack.affinity.AffinityGroupVMMapVO;
+import org.apache.cloudstack.affinity.dao.AffinityGroupDomainMapDao;
 import org.apache.cloudstack.affinity.dao.AffinityGroupVMMapDao;
 import org.apache.cloudstack.api.BaseListProjectAndAccountResourcesCmd;
 import org.apache.cloudstack.api.command.admin.host.ListHostsCmd;
@@ -137,6 +139,8 @@ import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.PermissionDeniedException;
 import com.cloud.ha.HighAvailabilityManager;
 import com.cloud.hypervisor.Hypervisor.HypervisorType;
+import com.cloud.network.dao.NetworkDomainVO;
+import com.cloud.network.dao.NetworkVO;
 import com.cloud.network.security.SecurityGroupVMMapVO;
 import com.cloud.network.security.dao.SecurityGroupVMMapDao;
 import com.cloud.org.Grouping;
@@ -168,6 +172,7 @@ import com.cloud.template.VirtualMachineTemplate.TemplateFilter;
 import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
 import com.cloud.user.AccountVO;
+import com.cloud.user.DomainManager;
 import com.cloud.user.dao.AccountDao;
 import com.cloud.utils.DateUtil;
 import com.cloud.utils.Pair;
@@ -315,6 +320,12 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
 
     @Inject
     private DedicatedResourceDao _dedicatedDao;
+
+    @Inject
+    DomainManager _domainMgr;
+
+    @Inject
+    AffinityGroupDomainMapDao _affinityGroupDomainMapDao;
 
     /*
      * (non-Javadoc)
@@ -2485,12 +2496,24 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
 
             /*
              * List all resources due to Explicit Dedication except the
-             * dedicated resources of other account if (domainId != null) { //
-             * for domainId != null // right now, we made the decision to only
-             * list zones associated // with this domain, private zone
-             * sc.addAnd("domainId", SearchCriteria.Op.EQ, domainId); } else
+             * dedicated resources of other account
              */
-            if (account.getType() == Account.ACCOUNT_TYPE_NORMAL) {
+            if (domainId != null) { //
+                // for domainId != null // right now, we made the decision to
+                // only list zones associated // with this domain, private zone
+                sc.addAnd("domainId", SearchCriteria.Op.EQ, domainId);
+
+                if (account.getType() == Account.ACCOUNT_TYPE_NORMAL) {
+                    // accountId == null (zones dedicated to a domain) or
+                    // accountId = caller
+                    SearchCriteria<DataCenterJoinVO> sdc = _dcJoinDao.createSearchCriteria();
+                    sdc.addOr("accountId", SearchCriteria.Op.EQ, account.getId());
+                    sdc.addOr("accountId", SearchCriteria.Op.NULL);
+
+                    sc.addAnd("accountId", SearchCriteria.Op.SC, sdc);
+                }
+
+            } else if (account.getType() == Account.ACCOUNT_TYPE_NORMAL) {
                 // it was decided to return all zones for the user's domain, and
                 // everything above till root
                 // list all zones belonging to this domain, and all of its
@@ -2516,10 +2539,18 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
                 SearchCriteria<DataCenterJoinVO> sdc = _dcJoinDao.createSearchCriteria();
                 sdc.addOr("domainId", SearchCriteria.Op.IN, domainIds.toArray());
                 sdc.addOr("domainId", SearchCriteria.Op.NULL);
-                sc.addAnd("domain", SearchCriteria.Op.SC, sdc);
+                sc.addAnd("domainId", SearchCriteria.Op.SC, sdc);
 
                 // remove disabled zones
                 sc.addAnd("allocationState", SearchCriteria.Op.NEQ, Grouping.AllocationState.Disabled);
+
+                // accountId == null (zones dedicated to a domain) or
+                // accountId = caller
+                SearchCriteria<DataCenterJoinVO> sdc2 = _dcJoinDao.createSearchCriteria();
+                sdc2.addOr("accountId", SearchCriteria.Op.EQ, account.getId());
+                sdc2.addOr("accountId", SearchCriteria.Op.NULL);
+
+                sc.addAnd("accountId", SearchCriteria.Op.SC, sdc2);
 
                 // remove Dedicated zones not dedicated to this domainId or
                 // subdomainId
@@ -2559,7 +2590,7 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
                 SearchCriteria<DataCenterJoinVO> sdc = _dcJoinDao.createSearchCriteria();
                 sdc.addOr("domainId", SearchCriteria.Op.IN, domainIds.toArray());
                 sdc.addOr("domainId", SearchCriteria.Op.NULL);
-                sc.addAnd("domain", SearchCriteria.Op.SC, sdc);
+                sc.addAnd("domainId", SearchCriteria.Op.SC, sdc);
 
                 // remove disabled zones
                 sc.addAnd("allocationState", SearchCriteria.Op.NEQ, Grouping.AllocationState.Disabled);
@@ -2588,7 +2619,7 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
                     if (dcIds.size() == 0) {
                         return new Pair<List<DataCenterJoinVO>, Integer>(new ArrayList<DataCenterJoinVO>(), 0);
                     } else {
-                        sc.addAnd("idIn", SearchCriteria.Op.IN, dcIds.toArray());
+                        sc.addAnd("id", SearchCriteria.Op.IN, dcIds.toArray());
                     }
 
                 }
@@ -3019,6 +3050,58 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
         ListProjectResourcesCriteria listProjectResourcesCriteria = domainIdRecursiveListProject.third();
 
         Filter searchFilter = new Filter(AffinityGroupJoinVO.class, "id", true, startIndex, pageSize);
+        SearchCriteria<AffinityGroupJoinVO> sc = buildAffinityGroupSearchCriteria(domainId, isRecursive,
+                permittedAccounts, listProjectResourcesCriteria, affinityGroupId, affinityGroupName, affinityGroupType);
+        
+        Pair<List<AffinityGroupJoinVO>, Integer> uniqueGroupsPair = _affinityGroupJoinDao.searchAndCount(sc,
+                searchFilter);
+        // search group details by ids
+        List<AffinityGroupJoinVO> vrs = new ArrayList<AffinityGroupJoinVO>();
+        Integer count = uniqueGroupsPair.second();
+        if (count.intValue() != 0) {
+            List<AffinityGroupJoinVO> uniqueGroups = uniqueGroupsPair.first();
+            Long[] vrIds = new Long[uniqueGroups.size()];
+            int i = 0;
+            for (AffinityGroupJoinVO v : uniqueGroups) {
+                vrIds[i++] = v.getId();
+            }
+            vrs = _affinityGroupJoinDao.searchByIds(vrIds);
+        }
+
+        if (!permittedAccounts.isEmpty()) {
+            // add domain level affinity groups
+            if (domainId != null) {
+                SearchCriteria<AffinityGroupJoinVO> scDomain = buildAffinityGroupSearchCriteria(null, isRecursive,
+                        new ArrayList<Long>(), listProjectResourcesCriteria, affinityGroupId, affinityGroupName,
+                        affinityGroupType);
+                vrs.addAll(listDomainLevelAffinityGroups(scDomain, searchFilter, domainId));
+            } else {
+
+                for (Long permAcctId : permittedAccounts) {
+                    Account permittedAcct = _accountDao.findById(permAcctId);
+                    SearchCriteria<AffinityGroupJoinVO> scDomain = buildAffinityGroupSearchCriteria(
+                            null, isRecursive, new ArrayList<Long>(),
+                            listProjectResourcesCriteria, affinityGroupId, affinityGroupName, affinityGroupType);
+
+                    vrs.addAll(listDomainLevelAffinityGroups(scDomain, searchFilter, permittedAcct.getDomainId()));
+                }
+            }
+        } else if (((permittedAccounts.isEmpty()) && (domainId != null) && isRecursive)) {
+            // list all domain level affinity groups for the domain admin case
+            SearchCriteria<AffinityGroupJoinVO> scDomain = buildAffinityGroupSearchCriteria(null, isRecursive,
+                    new ArrayList<Long>(), listProjectResourcesCriteria, affinityGroupId, affinityGroupName,
+                    affinityGroupType);
+            vrs.addAll(listDomainLevelAffinityGroups(scDomain, searchFilter, domainId));
+        }
+
+        return new Pair<List<AffinityGroupJoinVO>, Integer>(vrs, vrs.size());
+
+    }
+
+    private SearchCriteria<AffinityGroupJoinVO> buildAffinityGroupSearchCriteria(Long domainId, boolean isRecursive,
+            List<Long> permittedAccounts, ListProjectResourcesCriteria listProjectResourcesCriteria,
+            Long affinityGroupId, String affinityGroupName, String affinityGroupType) {
+
         SearchBuilder<AffinityGroupJoinVO> groupSearch = _affinityGroupJoinDao.createSearchBuilder();
         _accountMgr.buildACLViewSearchBuilder(groupSearch, domainId, isRecursive, permittedAccounts,
                 listProjectResourcesCriteria);
@@ -3042,22 +3125,7 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
             sc.addAnd("type", SearchCriteria.Op.EQ, affinityGroupType);
         }
 
-        Pair<List<AffinityGroupJoinVO>, Integer> uniqueGroupsPair = _affinityGroupJoinDao.searchAndCount(sc,
-                searchFilter);
-        // search group details by ids
-        Integer count = uniqueGroupsPair.second();
-        if (count.intValue() == 0) {
-            // empty result
-            return uniqueGroupsPair;
-        }
-        List<AffinityGroupJoinVO> uniqueGroups = uniqueGroupsPair.first();
-        Long[] vrIds = new Long[uniqueGroups.size()];
-        int i = 0;
-        for (AffinityGroupJoinVO v : uniqueGroups) {
-            vrIds[i++] = v.getId();
-        }
-        List<AffinityGroupJoinVO> vrs = _affinityGroupJoinDao.searchByIds(vrIds);
-        return new Pair<List<AffinityGroupJoinVO>, Integer>(vrs, count);
+        return sc;
 
     }
 
@@ -3077,6 +3145,47 @@ public class QueryManagerImpl extends ManagerBase implements QueryService {
         }
         List<AffinityGroupJoinVO> ags = _affinityGroupJoinDao.searchByIds(agIds);
         return new Pair<List<AffinityGroupJoinVO>, Integer>(ags, count);
+    }
+
+    private List<AffinityGroupJoinVO> listDomainLevelAffinityGroups(
+            SearchCriteria<AffinityGroupJoinVO> sc, Filter searchFilter, long domainId) {
+        List<Long> affinityGroupIds = new ArrayList<Long>();
+        Set<Long> allowedDomains = _domainMgr.getDomainParentIds(domainId);
+        List<AffinityGroupDomainMapVO> maps = _affinityGroupDomainMapDao.listByDomain(allowedDomains.toArray());
+
+        for (AffinityGroupDomainMapVO map : maps) {
+            boolean subdomainAccess = map.isSubdomainAccess();
+            if (map.getDomainId() == domainId || subdomainAccess) {
+                affinityGroupIds.add(map.getAffinityGroupId());
+            }
+        }
+
+        if (!affinityGroupIds.isEmpty()) {
+            SearchCriteria<AffinityGroupJoinVO> domainSC = _affinityGroupJoinDao.createSearchCriteria();
+            domainSC.addAnd("id", SearchCriteria.Op.IN, affinityGroupIds.toArray());
+            domainSC.addAnd("aclType", SearchCriteria.Op.EQ, ACLType.Domain.toString());
+
+            sc.addAnd("id", SearchCriteria.Op.SC, domainSC);
+
+            Pair<List<AffinityGroupJoinVO>, Integer> uniqueGroupsPair = _affinityGroupJoinDao.searchAndCount(sc,
+                    searchFilter);
+            // search group by ids
+            Integer count = uniqueGroupsPair.second();
+            if (count.intValue() == 0) {
+                // empty result
+                return new ArrayList<AffinityGroupJoinVO>();
+            }
+            List<AffinityGroupJoinVO> uniqueGroups = uniqueGroupsPair.first();
+            Long[] vrIds = new Long[uniqueGroups.size()];
+            int i = 0;
+            for (AffinityGroupJoinVO v : uniqueGroups) {
+                vrIds[i++] = v.getId();
+            }
+            List<AffinityGroupJoinVO> vrs = _affinityGroupJoinDao.searchByIds(vrIds);
+            return vrs;
+        } else {
+            return new ArrayList<AffinityGroupJoinVO>();
+        }
     }
 
     @Override

@@ -19,6 +19,15 @@ package org.apache.cloudstack.networkoffering;
 
 import java.io.IOException;
 
+import javax.inject.Inject;
+
+import org.apache.cloudstack.acl.SecurityChecker;
+import org.apache.cloudstack.affinity.AffinityGroupService;
+import org.apache.cloudstack.affinity.dao.AffinityGroupDao;
+import org.apache.cloudstack.region.PortableIpDaoImpl;
+import org.apache.cloudstack.region.dao.RegionDaoImpl;
+import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDaoImpl;
+import org.apache.cloudstack.test.utils.SpringUtils;
 import org.mockito.Mockito;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -31,6 +40,7 @@ import org.springframework.core.type.filter.TypeFilter;
 
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.subsystem.api.storage.DataStoreManager;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.region.PortableIpDaoImpl;
@@ -64,7 +74,6 @@ import com.cloud.host.dao.HostDetailsDaoImpl;
 import com.cloud.host.dao.HostTagsDaoImpl;
 import com.cloud.network.IpAddressManager;
 import com.cloud.network.Ipv6AddressManager;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.StorageNetworkManager;
@@ -305,8 +314,8 @@ public class ChildTestConfiguration {
     }
 
     @Bean
-    public NetworkManager networkManager() {
-        return Mockito.mock(NetworkManager.class);
+    public NetworkOrchestrationService networkManager() {
+        return Mockito.mock(NetworkOrchestrationService.class);
     }
 
     @Bean
@@ -357,6 +366,16 @@ public class ChildTestConfiguration {
     @Bean
     public DataStoreManager dataStoreManager() {
         return Mockito.mock(DataStoreManager.class);
+    }
+
+    @Bean
+    public AffinityGroupDao affinityGroupDao() {
+        return Mockito.mock(AffinityGroupDao.class);
+    }
+
+    @Bean
+    public AffinityGroupService affinityGroupService() {
+        return Mockito.mock(AffinityGroupService.class);
     }
 
     public static class Library implements TypeFilter {

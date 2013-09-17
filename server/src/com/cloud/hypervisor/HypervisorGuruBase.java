@@ -25,7 +25,6 @@ import com.cloud.agent.api.Command;
 import com.cloud.agent.api.to.DiskTO;
 import com.cloud.agent.api.to.NicTO;
 import com.cloud.agent.api.to.VirtualMachineTO;
-import com.cloud.configuration.Config;
 import com.cloud.offering.ServiceOffering;
 import com.cloud.server.ConfigurationServer;
 import com.cloud.storage.dao.VMTemplateDetailsDao;
@@ -33,6 +32,7 @@ import com.cloud.utils.Pair;
 import com.cloud.utils.component.AdapterBase;
 import com.cloud.vm.NicProfile;
 import com.cloud.vm.NicVO;
+import com.cloud.vm.UserVmManager;
 import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VirtualMachineProfile;
@@ -124,7 +124,7 @@ public abstract class HypervisorGuruBase extends AdapterBase implements Hypervis
         // Workaround to make sure the TO has the UUID we need for Niciri integration
         VMInstanceVO vmInstance = _virtualMachineDao.findById(to.getId());
         // check if XStools/VMWare tools are present in the VM and dynamic scaling feature is enabled (per zone/global)
-        Boolean isDynamicallyScalable = vmInstance.isDynamicallyScalable() && Boolean.parseBoolean(_configServer.getConfigValue(Config.EnableDynamicallyScaleVm.key(), Config.ConfigurationParameterScope.zone.toString(), vm.getDataCenterId()));
+        Boolean isDynamicallyScalable = vmInstance.isDynamicallyScalable() && UserVmManager.EnableDynamicallyScaleVm.valueIn(vm.getDataCenterId());
         to.setEnableDynamicallyScaleVm(isDynamicallyScalable);
         to.setUuid(vmInstance.getUuid());
 

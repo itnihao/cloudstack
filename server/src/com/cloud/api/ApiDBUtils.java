@@ -52,6 +52,7 @@ import org.apache.cloudstack.api.response.UserResponse;
 import org.apache.cloudstack.api.response.UserVmResponse;
 import org.apache.cloudstack.api.response.VolumeResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.framework.jobs.AsyncJob;
@@ -102,6 +103,7 @@ import com.cloud.api.query.vo.TemplateJoinVO;
 import com.cloud.api.query.vo.UserAccountJoinVO;
 import com.cloud.api.query.vo.UserVmJoinVO;
 import com.cloud.api.query.vo.VolumeJoinVO;
+import com.cloud.capacity.CapacityManager;
 import com.cloud.capacity.CapacityVO;
 import com.cloud.capacity.dao.CapacityDao;
 import com.cloud.capacity.dao.CapacityDaoImpl.SummedCapacity;
@@ -140,7 +142,6 @@ import com.cloud.network.Network;
 import com.cloud.network.Network.Capability;
 import com.cloud.network.Network.Provider;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkProfile;
 import com.cloud.network.Networks.TrafficType;
@@ -296,7 +297,7 @@ public class ApiDBUtils {
     static VolumeOrchestrationService _volumeMgr;
     static UserVmManager _userVmMgr;
     static NetworkModel _networkModel;
-    static NetworkManager _networkMgr;
+    static NetworkOrchestrationService _networkMgr;
     static TemplateManager _templateMgr;
     static ConfigurationManager _configMgr;
 
@@ -409,7 +410,7 @@ public class ApiDBUtils {
     @Inject private StorageManager storageMgr;
     @Inject private UserVmManager userVmMgr;
     @Inject private NetworkModel networkModel;
-    @Inject private NetworkManager networkMgr;
+    @Inject private NetworkOrchestrationService networkMgr;
     @Inject private StatsCollector statsCollector;
     @Inject private TemplateManager templateMgr;
     @Inject private VolumeOrchestrationService volumeMgr;
@@ -1047,7 +1048,7 @@ public class ApiDBUtils {
     }
 
     public static float getCpuOverprovisioningFactor() {
-        String opFactor = _configDao.getValue(Config.CPUOverprovisioningFactor.key());
+        String opFactor = _configDao.getValue(CapacityManager.CpuOverprovisioningFactorCK);
         float cpuOverprovisioningFactor = NumbersUtil.parseFloat(opFactor, 1);
         return cpuOverprovisioningFactor;
     }

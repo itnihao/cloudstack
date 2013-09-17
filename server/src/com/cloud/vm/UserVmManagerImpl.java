@@ -63,10 +63,13 @@ import org.apache.cloudstack.api.command.user.vmgroup.DeleteVMGroupCmd;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.context.ServerContexts;
 import org.apache.cloudstack.engine.cloud.entity.api.VirtualMachineEntity;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.orchestration.service.VolumeOrchestrationService;
 import org.apache.cloudstack.engine.service.api.OrchestrationService;
 import org.apache.cloudstack.engine.subsystem.api.storage.TemplateDataFactory;
 import org.apache.cloudstack.engine.subsystem.api.storage.TemplateInfo;
+import org.apache.cloudstack.framework.config.ConfigKey;
+import org.apache.cloudstack.framework.config.Configurable;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.framework.jobs.AsyncJobManager;
 import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
@@ -138,7 +141,6 @@ import com.cloud.network.Network;
 import com.cloud.network.Network.IpAddresses;
 import com.cloud.network.Network.Provider;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.network.PhysicalNetwork;
@@ -258,9 +260,8 @@ import com.cloud.vm.snapshot.VMSnapshotVO;
 import com.cloud.vm.snapshot.dao.VMSnapshotDao;
 
 @Local(value = { UserVmManager.class, UserVmService.class })
-public class UserVmManagerImpl extends ManagerBase implements UserVmManager, VirtualMachineGuru, UserVmService {
-    private static final Logger s_logger = Logger
-            .getLogger(UserVmManagerImpl.class);
+public class UserVmManagerImpl extends ManagerBase implements UserVmManager, VirtualMachineGuru, UserVmService, Configurable {
+    private static final Logger s_logger = Logger.getLogger(UserVmManagerImpl.class);
 
     private static final int ACQUIRE_GLOBAL_LOCK_TIMEOUT_FOR_COOPERATION = 3; // 3
     // seconds
@@ -309,7 +310,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     @Inject
     protected NetworkModel _networkModel = null;
     @Inject
-    protected NetworkManager _networkMgr = null;
+    protected NetworkOrchestrationService _networkMgr = null;
     @Inject
     protected StorageManager _storageMgr = null;
     @Inject
@@ -442,8 +443,6 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     protected int _scaleRetry;
 
     @Inject ConfigurationDao _configDao;
-    private int _createprivatetemplatefromvolumewait;
-    private int _createprivatetemplatefromsnapshotwait;
     private final int MAX_VM_NAME_LEN = 80;
     private final int MAX_HTTP_GET_LENGTH = 2 * MAX_USER_DATA_LENGTH_BYTES;
     private final int MAX_HTTP_POST_LENGTH = 16 * MAX_USER_DATA_LENGTH_BYTES;
@@ -605,14 +604,14 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         Long vmId = cmd.getId();
 
         UserVmVO userVm = _vmDao.findById(cmd.getId());
+        if (userVm == null) {
+            throw new InvalidParameterValueException("unable to find a virtual machine by id" + cmd.getId());
+        }
+
         _vmDao.loadDetails(userVm);
         VMTemplateVO template = _templateDao.findByIdIncludingRemoved(userVm.getTemplateId());
 
         // Do parameters input validation
-
-        if (userVm == null) {
-            throw new InvalidParameterValueException("unable to find a virtual machine by id" + cmd.getId());
-        }
 
         if (userVm.getState() == State.Error || userVm.getState() == State.Expunging) {
             s_logger.error("vm is not in the right state: " + vmId);
@@ -714,8 +713,6 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         }
 
         User user = _userDao.findById(userId);
-        Account account = _accountDao.findById(user.getAccountId());
-
         try {
             VirtualMachineEntity vmEntity = _orchSrvc.getVirtualMachine(vm.getUuid());
             status = vmEntity.stop(new Long(userId).toString());
@@ -1269,7 +1266,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         if (vmInstance.getState().equals(State.Running)) {
             int retry = _scaleRetry;
             ExcludeList excludes = new ExcludeList();
-            boolean enableDynamicallyScaleVm = Boolean.parseBoolean(_configServer.getConfigValue(Config.EnableDynamicallyScaleVm.key(), Config.ConfigurationParameterScope.zone.toString(), vmInstance.getDataCenterId()));
+            boolean enableDynamicallyScaleVm = EnableDynamicallyScaleVm.valueIn(vmInstance.getDataCenterId());
             if(!enableDynamicallyScaleVm){
                throw new PermissionDeniedException("Dynamically scaling virtual machines is disabled for this zone, please contact your admin");
             }
@@ -1496,19 +1493,6 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
             _instance = "DEFAULT";
         }
 
-        String value = _configDao
-                .getValue(Config.CreatePrivateTemplateFromVolumeWait.toString());
-        _createprivatetemplatefromvolumewait = NumbersUtil.parseInt(value,
-                Integer.parseInt(Config.CreatePrivateTemplateFromVolumeWait
-                        .getDefaultValue()));
-
-        value = _configDao
-                .getValue(Config.CreatePrivateTemplateFromSnapshotWait
-                        .toString());
-        _createprivatetemplatefromsnapshotwait = NumbersUtil.parseInt(value,
-                Integer.parseInt(Config.CreatePrivateTemplateFromSnapshotWait
-                        .getDefaultValue()));
-
         String workers = configs.get("expunge.workers");
         int wrks = NumbersUtil.parseInt(workers, 10);
         capacityReleaseInterval = NumbersUtil.parseInt(_configDao.getValue(Config.CapacitySkipcountingHours.key()), 3600);
@@ -1537,15 +1521,8 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         VirtualMachine.State.getStateMachine().registerListener(
                 new UserVmStateListener(_usageEventDao, _networkDao, _nicDao));
 
-        value = _configDao.getValue(Config.SetVmInternalNameUsingDisplayName.key());
-
-        if(value == null) {
-            _instanceNameFlag = false;
-        }
-        else
-        {
-            _instanceNameFlag = Boolean.parseBoolean(value);
-        }
+        String value = _configDao.getValue(Config.SetVmInternalNameUsingDisplayName.key());
+        _instanceNameFlag = (value == null)?false:Boolean.parseBoolean(value);
 
        _scaleRetry = NumbersUtil.parseInt(configs.get(Config.ScaleRetry.key()), 2);
 
@@ -1775,12 +1752,6 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
             }
         }
 
-    }
-
-    private static boolean isAdmin(short accountType) {
-        return ((accountType == Account.ACCOUNT_TYPE_ADMIN)
-                || (accountType == Account.ACCOUNT_TYPE_RESOURCE_DOMAIN_ADMIN)
-                || (accountType == Account.ACCOUNT_TYPE_DOMAIN_ADMIN) || (accountType == Account.ACCOUNT_TYPE_READ_ONLY_ADMIN));
     }
 
     @Override
@@ -2503,20 +2474,9 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
                             + zone.getId());
         }
 
-        boolean isExplicit = false;
-        // check affinity group type Explicit dedication
-        if (affinityGroupIdList != null) {
-            for (Long affinityGroupId : affinityGroupIdList) {
-                AffinityGroupVO ag = _affinityGroupDao.findById(affinityGroupId);
-                String agType = ag.getType();
-                if (agType.equals("ExplicitDedication")) {
-                    isExplicit = true;
-                }
-            }
-        }
         // check if zone is dedicated
         DedicatedResourceVO dedicatedZone = _dedicatedDao.findByZoneId(zone.getId());
-        if (isExplicit && dedicatedZone != null) {
+        if (dedicatedZone != null) {
             DomainVO domain = _domainDao.findById(dedicatedZone.getDomainId());
             if (domain == null) {
                 throw new CloudRuntimeException("Unable to find the domain "
@@ -2572,13 +2532,27 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
                             + " ,type: " + ag.getType() + " , Please try again after removing the affinity group");
                 } else {
                     // verify permissions
-                    _accountMgr.checkAccess(caller, null, true, owner, ag);
-                    // Root admin has access to both VM and AG by default, but
-                    // make sure the owner of these entities is same
-                    if (caller.getId() == Account.ACCOUNT_ID_SYSTEM || _accountMgr.isRootAdmin(caller.getType())) {
-                        if (ag.getAccountId() != owner.getAccountId()) {
-                            throw new PermissionDeniedException("Affinity Group " + ag
-                                    + " does not belong to the VM's account");
+                    if (ag.getAclType() == ACLType.Domain) {
+                        _accountMgr.checkAccess(caller, null, false, owner, ag);
+                        // Root admin has access to both VM and AG by default,
+                        // but
+                        // make sure the owner of these entities is same
+                        if (caller.getId() == Account.ACCOUNT_ID_SYSTEM || _accountMgr.isRootAdmin(caller.getType())) {
+                            if (!_affinityGroupService.isAffinityGroupAvailableInDomain(ag.getId(), owner.getDomainId())) {
+                                throw new PermissionDeniedException("Affinity Group " + ag
+                                        + " does not belong to the VM's domain");
+                            }
+                        }
+                    } else {
+                        _accountMgr.checkAccess(caller, null, true, owner, ag);
+                        // Root admin has access to both VM and AG by default,
+                        // but
+                        // make sure the owner of these entities is same
+                        if (caller.getId() == Account.ACCOUNT_ID_SYSTEM || _accountMgr.isRootAdmin(caller.getType())) {
+                            if (ag.getAccountId() != owner.getAccountId()) {
+                                throw new PermissionDeniedException("Affinity Group " + ag
+                                        + " does not belong to the VM's account");
+                            }
                         }
                     }
                 }
@@ -2713,58 +2687,59 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
 
         long id = _vmDao.getNextInSequence(Long.class, "id");
 
-        String instanceName;
-        if (_instanceNameFlag && displayName != null) {
-            // Check if the displayName conforms to RFC standards.
-            checkNameForRFCCompliance(displayName);
-            instanceName = VirtualMachineName.getVmName(id, owner.getId(), displayName);
-            if (instanceName.length() > MAX_VM_NAME_LEN) {
-                throw new InvalidParameterValueException("Specified display name " + displayName + " causes VM name to exceed 80 characters in length");
-            }
-            // Search whether there is already an instance with the same instance name
-            // that is not in the destroyed or expunging state.
-            VMInstanceVO vm = _vmInstanceDao.findVMByInstanceName(instanceName);
-            if (vm != null && vm.getState() != VirtualMachine.State.Expunging) {
-                throw new InvalidParameterValueException("There already exists a VM by the display name supplied");
-            }
-        } else {
-            instanceName = VirtualMachineName.getVmName(id, owner.getId(), _instance);
+        if (hostName != null) {
+            // Check is hostName is RFC compliant
+            checkNameForRFCCompliance(hostName);
         }
 
+        String instanceName = null;
         String uuidName = UUID.randomUUID().toString();
-
-        // verify hostname information
-        if (hostName == null) {
-            hostName = uuidName;
-        } else {
-            //1) check is hostName is RFC compliant
-            checkNameForRFCCompliance(hostName);
-            // 2) hostName has to be unique in the network domain
-            Map<String, List<Long>> ntwkDomains = new HashMap<String, List<Long>>();
-            for (NetworkVO network : networkList) {
-                String ntwkDomain = network.getNetworkDomain();
-                if (!ntwkDomains.containsKey(ntwkDomain)) {
-                    List<Long> ntwkIds = new ArrayList<Long>();
-                    ntwkIds.add(network.getId());
-                    ntwkDomains.put(ntwkDomain, ntwkIds);
+        if (_instanceNameFlag && hypervisor.equals(HypervisorType.VMware)) {
+            if (hostName == null) {
+                if (displayName != null) {
+                    hostName = displayName;
                 } else {
-                    List<Long> ntwkIds = ntwkDomains.get(ntwkDomain);
-                    ntwkIds.add(network.getId());
-                    ntwkDomains.put(ntwkDomain, ntwkIds);
+                    hostName = uuidName;
                 }
             }
+        } else {
+            if (hostName == null) {
+                hostName = uuidName;
+            }
+        }
 
-            for (String ntwkDomain : ntwkDomains.keySet()) {
-                for (Long ntwkId : ntwkDomains.get(ntwkDomain)) {
-                    // * get all vms hostNames in the network
-                    List<String> hostNames = _vmInstanceDao
-                            .listDistinctHostNames(ntwkId);
-                    // * verify that there are no duplicates
-                    if (hostNames.contains(hostName)) {
-                        throw new InvalidParameterValueException("The vm with hostName " + hostName
-                                + " already exists in the network domain: " + ntwkDomain + "; network="
-                                + _networkModel.getNetwork(ntwkId));
-                    }
+        instanceName = VirtualMachineName.getVmName(id, owner.getId(), _instance);
+
+        // Check if VM with instanceName already exists.
+        VMInstanceVO vmObj = _vmInstanceDao.findVMByInstanceName(instanceName);
+        if (vmObj != null && vmObj.getState() != VirtualMachine.State.Expunging) {
+            throw new InvalidParameterValueException("There already exists a VM by the display name supplied");
+        }
+
+        // Check that hostName is unique in the network domain
+        Map<String, List<Long>> ntwkDomains = new HashMap<String, List<Long>>();
+        for (NetworkVO network : networkList) {
+            String ntwkDomain = network.getNetworkDomain();
+            if (!ntwkDomains.containsKey(ntwkDomain)) {
+                List<Long> ntwkIds = new ArrayList<Long>();
+                ntwkIds.add(network.getId());
+                ntwkDomains.put(ntwkDomain, ntwkIds);
+            } else {
+                List<Long> ntwkIds = ntwkDomains.get(ntwkDomain);
+                ntwkIds.add(network.getId());
+                ntwkDomains.put(ntwkDomain, ntwkIds);
+            }
+        }
+
+        for (String ntwkDomain : ntwkDomains.keySet()) {
+            for (Long ntwkId : ntwkDomains.get(ntwkDomain)) {
+                // * get all vms hostNames in the network
+                List<String> hostNames = _vmInstanceDao.listDistinctHostNames(ntwkId);
+                // * verify that there are no duplicates
+                if (hostNames.contains(hostName)) {
+                    throw new InvalidParameterValueException("The vm with hostName " + hostName
+                        + " already exists in the network domain: " + ntwkDomain + "; network="
+                        + _networkModel.getNetwork(ntwkId));
                 }
             }
         }
@@ -3454,7 +3429,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         // support KVM only util 2013.06.25
         if (!userVm.getHypervisorType().equals(HypervisorType.KVM))
             return;
-    	// Collect vm disk statistics from host before stopping Vm
+    	s_logger.debug("Collect vm disk statistics from host before stopping Vm");
     	long hostId = userVm.getHostId();
     	List<String> vmNames = new ArrayList<String>();
     	vmNames.add(userVm.getInstanceName());
@@ -3476,8 +3451,9 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
             try {
                 txn.start();
                 HashMap<String, List<VmDiskStatsEntry>> vmDiskStatsByName = diskStatsAnswer.getVmDiskStatsMap();
+                if (vmDiskStatsByName == null)
+                    return;
                 List<VmDiskStatsEntry> vmDiskStats = vmDiskStatsByName.get(userVm.getInstanceName());
-
                 if (vmDiskStats == null)
 		    return;
 
@@ -4882,7 +4858,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     @Override
     public void prepareStop(VirtualMachineProfile profile) {
         UserVmVO vm = _vmDao.findById(profile.getId());
-        if (vm.getState() == State.Running)
+        if (vm != null && vm.getState() == State.Stopping)
             collectVmDiskStatistics(vm);
     }
     
@@ -4905,4 +4881,13 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         }
     }
 
+    @Override
+    public String getConfigComponentName() {
+        return UserVmManager.class.getSimpleName();
+    }
+
+    @Override
+    public ConfigKey<?>[] getConfigKeys() {
+        return new ConfigKey<?>[] {EnableDynamicallyScaleVm};
+    }
 }

@@ -36,6 +36,7 @@ import org.apache.cloudstack.api.command.user.network.CreateNetworkCmd;
 import org.apache.cloudstack.api.command.user.network.ListNetworksCmd;
 import org.apache.cloudstack.api.command.user.network.RestartNetworkCmd;
 import org.apache.cloudstack.api.command.user.vm.ListNicsCmd;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 
 import com.cloud.deploy.DataCenterDeployment;
 import com.cloud.deploy.DeployDestination;
@@ -51,7 +52,6 @@ import com.cloud.network.IpAddress;
 import com.cloud.network.Network;
 import com.cloud.network.Network.Provider;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkProfile;
 import com.cloud.network.NetworkService;
 import com.cloud.network.Networks.TrafficType;
@@ -84,8 +84,8 @@ import com.cloud.vm.VirtualMachineProfile;
 
 
 @Component
-@Local(value = { NetworkManager.class, NetworkService.class })
-public class MockNetworkManagerImpl extends ManagerBase implements NetworkManager, NetworkService {
+@Local(value = { NetworkOrchestrationService.class, NetworkService.class })
+public class MockNetworkManagerImpl extends ManagerBase implements NetworkOrchestrationService, NetworkService {
     @Inject
     NetworkServiceMapDao  _ntwkSrvcDao;
     @Inject
@@ -936,19 +936,6 @@ public class MockNetworkManagerImpl extends ManagerBase implements NetworkManage
     public NetworkProfile convertNetworkToNetworkProfile(long networkId) {
         // TODO Auto-generated method stub
         return null;
-    }
-
-
-
-
-
-    /* (non-Javadoc)
-     * @see com.cloud.network.NetworkManager#getNetworkLockTimeout()
-     */
-    @Override
-    public int getNetworkLockTimeout() {
-        // TODO Auto-generated method stub
-        return 0;
     }
 
 

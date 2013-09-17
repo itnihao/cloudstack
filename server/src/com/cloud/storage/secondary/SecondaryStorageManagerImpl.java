@@ -33,6 +33,7 @@ import javax.naming.ConfigurationException;
 import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.subsystem.api.storage.DataStore;
 import org.apache.cloudstack.engine.subsystem.api.storage.DataStoreManager;
 import org.apache.cloudstack.engine.subsystem.api.storage.ZoneScope;
@@ -81,7 +82,6 @@ import com.cloud.info.RunningHostInfoAgregator;
 import com.cloud.info.RunningHostInfoAgregator.ZoneHostInfo;
 import com.cloud.keystore.KeystoreManager;
 import com.cloud.network.Network;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.Networks.TrafficType;
 import com.cloud.network.dao.IPAddressDao;
@@ -167,7 +167,6 @@ public class SecondaryStorageManagerImpl extends ManagerBase implements Secondar
 
     private static final int STARTUP_DELAY = 60000; // 60 seconds
 
-    private String _mgmt_host;
     private int _mgmt_port = 8250;
 
     @Inject
@@ -186,7 +185,7 @@ public class SecondaryStorageManagerImpl extends ManagerBase implements Secondar
     @Inject
     private AgentManager _agentMgr;
     @Inject
-    protected NetworkManager _networkMgr;
+    protected NetworkOrchestrationService _networkMgr;
     @Inject
     protected NetworkModel _networkModel;
     @Inject
@@ -763,7 +762,7 @@ public class SecondaryStorageManagerImpl extends ManagerBase implements Secondar
 
     private synchronized Map<Long, ZoneHostInfo> getZoneHostInfo() {
         Date cutTime = DateUtil.currentGMTTime();
-        List<RunningHostCountInfo> l = _hostDao.getRunningHostCounts(new Date(cutTime.getTime() - _clusterMgr.getHeartbeatThreshold()));
+        List<RunningHostCountInfo> l = _hostDao.getRunningHostCounts(new Date(cutTime.getTime() - ClusterManager.HeartbeatThreshold.value()));
 
         RunningHostInfoAgregator aggregator = new RunningHostInfoAgregator();
         if (l.size() > 0) {
@@ -824,10 +823,6 @@ public class SecondaryStorageManagerImpl extends ManagerBase implements Secondar
         }
 
         Map<String, String> agentMgrConfigs = _configDao.getConfiguration("AgentManager", params);
-        _mgmt_host = agentMgrConfigs.get("host");
-        if (_mgmt_host == null) {
-            s_logger.warn("Critical warning! Please configure your management server host address right after you have started your management server and then restart it, otherwise you won't have access to secondary storage");
-        }
 
         value = agentMgrConfigs.get("port");
         _mgmt_port = NumbersUtil.parseInt(value, 8250);
@@ -1020,7 +1015,7 @@ public class SecondaryStorageManagerImpl extends ManagerBase implements Secondar
 
         StringBuilder buf = profile.getBootArgsBuilder();
         buf.append(" template=domP type=secstorage");
-        buf.append(" host=").append(_mgmt_host);
+        buf.append(" host=").append(ClusterManager.ManagementHostIPAdr.value());
         buf.append(" port=").append(_mgmt_port);
         buf.append(" name=").append(profile.getVirtualMachine().getHostName());
 

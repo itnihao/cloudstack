@@ -18,7 +18,7 @@ package com.cloud.server;
 
 import java.util.List;
 
-import org.apache.cloudstack.framework.config.ConfigurationVO;
+import org.apache.cloudstack.framework.config.impl.ConfigurationVO;
 
 import com.cloud.exception.InternalErrorException;
 
@@ -34,6 +34,5 @@ public interface ConfigurationServer {
      */
     public void persistDefaultValues() throws InternalErrorException;
     public void updateKeyPairs();
-    public String getConfigValue(String name, String scope, Long resourceId);
     public List<ConfigurationVO> getConfigListByScope(String scope, Long resourceId);
 }

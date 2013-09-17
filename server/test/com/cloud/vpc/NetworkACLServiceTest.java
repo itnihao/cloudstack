@@ -41,10 +41,10 @@ import org.springframework.test.context.support.AnnotationConfigContextLoader;
 
 import org.apache.cloudstack.api.command.user.network.CreateNetworkACLCmd;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.test.utils.SpringUtils;
 
 import com.cloud.exception.InvalidParameterValueException;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.dao.NetworkDao;
 import com.cloud.network.vpc.NetworkACLItem;
@@ -54,6 +54,7 @@ import com.cloud.network.vpc.NetworkACLManager;
 import com.cloud.network.vpc.NetworkACLService;
 import com.cloud.network.vpc.NetworkACLServiceImpl;
 import com.cloud.network.vpc.NetworkACLVO;
+import com.cloud.network.vpc.Vpc;
 import com.cloud.network.vpc.VpcManager;
 import com.cloud.network.vpc.VpcVO;
 import com.cloud.network.vpc.dao.NetworkACLDao;
@@ -64,6 +65,7 @@ import com.cloud.user.AccountManager;
 import com.cloud.user.AccountVO;
 import com.cloud.user.UserVO;
 import com.cloud.utils.component.ComponentContext;
+import com.cloud.utils.db.EntityManager;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(loader = AnnotationConfigContextLoader.class)
@@ -81,6 +83,8 @@ public class NetworkACLServiceTest extends TestCase{
     NetworkACLDao _networkACLDao;
     @Inject
     NetworkACLItemDao _networkACLItemDao;
+    @Inject
+    EntityManager _entityMgr;
 
     private CreateNetworkACLCmd createACLItemCmd;
     private NetworkACLVO acl;
@@ -143,7 +147,7 @@ public class NetworkACLServiceTest extends TestCase{
 
     @Test
     public void testCreateACL() throws Exception {
-        Mockito.when(_vpcMgr.getVpc(Mockito.anyLong())).thenReturn(new VpcVO());
+        Mockito.when(_entityMgr.findById(Mockito.eq(Vpc.class), Mockito.anyLong())).thenReturn(new VpcVO());
         Mockito.when(_networkAclMgr.createNetworkACL("acl_new", "acl desc", 1L)).thenReturn(acl);
         assertNotNull(_aclService.createNetworkACL("acl_new", "acl desc", 1L));
     }
@@ -157,7 +161,7 @@ public class NetworkACLServiceTest extends TestCase{
 
     @Test
     public void testCreateACLItem() throws Exception {
-        Mockito.when(_vpcMgr.getVpc(Mockito.anyLong())).thenReturn(new VpcVO());
+        Mockito.when(_entityMgr.findById(Mockito.eq(Vpc.class), Mockito.anyLong())).thenReturn(new VpcVO());
         Mockito.when(_networkAclMgr.getNetworkACL(Mockito.anyLong())).thenReturn(acl);
         Mockito.when(_networkAclMgr.createNetworkACLItem(Mockito.anyInt(), Mockito.anyInt(), Mockito.anyString(), Mockito.anyList(), Mockito.anyInt(), Mockito.anyInt(),
                 Mockito.any(NetworkACLItem.TrafficType.class), Mockito.anyLong(),  Mockito.anyString(), Mockito.anyInt())).thenReturn(new NetworkACLItemVO());
@@ -167,7 +171,7 @@ public class NetworkACLServiceTest extends TestCase{
 
     @Test(expected = InvalidParameterValueException.class)
     public void testCreateACLItemDuplicateNumber() throws Exception {
-        Mockito.when(_vpcMgr.getVpc(Mockito.anyLong())).thenReturn(new VpcVO());
+        Mockito.when(_entityMgr.findById(Mockito.eq(Vpc.class), Mockito.anyLong())).thenReturn(new VpcVO());
         Mockito.when(_networkAclMgr.getNetworkACL(Mockito.anyLong())).thenReturn(acl);
         Mockito.when(_networkACLItemDao.findByAclAndNumber(Mockito.anyLong(), Mockito.anyInt())).thenReturn(new NetworkACLItemVO());
         _aclService.createNetworkACLItem(createACLItemCmd);
@@ -187,13 +191,18 @@ public class NetworkACLServiceTest extends TestCase{
     public static class NetworkACLTestConfiguration extends SpringUtils.CloudStackTestConfiguration{
 
         @Bean
+        public EntityManager entityManager() {
+            return Mockito.mock(EntityManager.class);
+        }
+
+        @Bean
         public AccountManager accountManager() {
             return Mockito.mock(AccountManager.class);
         }
 
         @Bean
-        public NetworkManager networkManager() {
-            return Mockito.mock(NetworkManager.class);
+        public NetworkOrchestrationService networkManager() {
+            return Mockito.mock(NetworkOrchestrationService.class);
         }
 
         @Bean

@@ -44,6 +44,7 @@ import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
+import org.apache.cloudstack.affinity.AffinityGroup;
 import org.apache.cloudstack.affinity.dao.AffinityGroupDao;
 import org.apache.cloudstack.api.command.admin.account.UpdateAccountCmd;
 import org.apache.cloudstack.api.command.admin.user.DeleteUserCmd;
@@ -51,6 +52,7 @@ import org.apache.cloudstack.api.command.admin.user.RegisterCmd;
 import org.apache.cloudstack.api.command.admin.user.UpdateUserCmd;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.context.ServerContexts;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.region.gslb.GlobalLoadBalancerRuleDao;
 
@@ -83,7 +85,6 @@ import com.cloud.exception.PermissionDeniedException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.network.IpAddress;
 import com.cloud.network.IpAddressManager;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.VpnUserVO;
 import com.cloud.network.as.AutoScaleManager;
 import com.cloud.network.dao.AccountGuestVlanMapDao;
@@ -185,7 +186,7 @@ public class AccountManagerImpl extends ManagerBase implements AccountManager, M
     @Inject
     private SecurityGroupManager _networkGroupMgr;
     @Inject
-    private NetworkManager _networkMgr;
+    private NetworkOrchestrationService _networkMgr;
     @Inject
     private SnapshotManager _snapMgr;
     @Inject
@@ -395,7 +396,9 @@ public class AccountManagerImpl extends ManagerBase implements AccountManager, M
                 Account account = ApiDBUtils.findAccountById(entity.getAccountId());
                 domainId = account != null ? account.getDomainId() : -1;
             }
-            if (entity.getAccountId() != -1 && domainId != -1 && !(entity instanceof VirtualMachineTemplate) && !(accessType != null && accessType == AccessType.UseNetwork)) {
+            if (entity.getAccountId() != -1 && domainId != -1 && !(entity instanceof VirtualMachineTemplate)
+                    && !(accessType != null && accessType == AccessType.UseNetwork)
+                    && !(entity instanceof AffinityGroup)) {
                 List<ControlledEntity> toBeChecked = domains.get(entity.getDomainId());
                 // for templates, we don't have to do cross domains check
                 if (toBeChecked == null) {

@@ -285,7 +285,7 @@ CREATE TABLE `cloud`.`load_balancer_healthcheck_policies` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 
-INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server', 'vm.instancename.flag', 'false', 'Append guest VM display Name (if set) to the internal name of the VM');
+INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server', 'vm.instancename.flag', 'false', 'If set to true, will set guest VM\'s name as it appears on the hypervisor, to its hostname');
 
 UPDATE `cloud`.`guest_os` SET category_id=10 where id=59;
 INSERT IGNORE INTO `cloud`.`guest_os` (id, uuid, category_id, display_name) VALUES (165, UUID(), 6, 'Windows 8 (32-bit)');
@@ -397,10 +397,6 @@ CREATE TABLE `cloud`.`user_vm_clone_setting` (
   PRIMARY KEY (`vm_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-INSERT INTO `cloud`.`configuration` (category, instance, component, name, value, description)
-    SELECT tmp.category, tmp.instance, tmp.component, tmp.name, tmp.value, tmp.description FROM
-    (SELECT 'Advanced' category, 'DEFAULT' instance, 'UserVmManager' component, 'vmware.create.full.clone' name, 'true' value, 'If set to true, creates VMs as full clones on ESX hypervisor' description) tmp
-    WHERE NOT EXISTS (SELECT 1 FROM `cloud`.`configuration` WHERE name = 'vmware.create.full.clone');
 
 CREATE TABLE `cloud`.`affinity_group` (
   `id` bigint unsigned NOT NULL auto_increment,
@@ -410,12 +406,14 @@ CREATE TABLE `cloud`.`affinity_group` (
   `description` varchar(4096) NULL,
   `domain_id` bigint unsigned NOT NULL,
   `account_id` bigint unsigned NOT NULL,
+  `acl_type` varchar(15) NOT NULL COMMENT 'ACL access type. can be Account/Domain',
   UNIQUE (`name`, `account_id`),
   PRIMARY KEY  (`id`),
   CONSTRAINT `fk_affinity_group__account_id` FOREIGN KEY(`account_id`) REFERENCES `account`(`id`),
   CONSTRAINT `fk_affinity_group__domain_id` FOREIGN KEY(`domain_id`) REFERENCES `domain`(`id`),
   CONSTRAINT `uc_affinity_group__uuid` UNIQUE (`uuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 
 CREATE TABLE `cloud`.`affinity_group_vm_map` (
   `id` bigint unsigned NOT NULL auto_increment,
@@ -426,7 +424,15 @@ CREATE TABLE `cloud`.`affinity_group_vm_map` (
   CONSTRAINT `fk_affinity_group_vm_map___instance_id` FOREIGN KEY(`instance_id`) REFERENCES `user_vm` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-
+CREATE TABLE `cloud`.`affinity_group_domain_map` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'id',
+  `domain_id` bigint unsigned NOT NULL COMMENT 'domain id',
+  `affinity_group_id` bigint unsigned NOT NULL COMMENT 'affinity group id',
+  `subdomain_access` int(1) unsigned DEFAULT 1 COMMENT '1 if affinity group can be accessible from the subdomain',
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_affinity_group_domain_map__domain_id` FOREIGN KEY (`domain_id`) REFERENCES `domain`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_affinity_group_domain_map__affinity_group_id` FOREIGN KEY (`affinity_group_id`) REFERENCES `affinity_group`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE `cloud`.`dedicated_resources` (
   `id` bigint unsigned NOT NULL UNIQUE AUTO_INCREMENT COMMENT 'id',
@@ -437,6 +443,7 @@ CREATE TABLE `cloud`.`dedicated_resources` (
   `host_id` bigint unsigned COMMENT 'host id',
   `domain_id` bigint unsigned COMMENT 'domain id of the domain to which resource is dedicated',
   `account_id` bigint unsigned COMMENT 'account id of the account to which resource is dedicated',
+  `affinity_group_id` bigint unsigned NOT NULL COMMENT 'affinity group id associated',
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_dedicated_resources__data_center_id` FOREIGN KEY (`data_center_id`) REFERENCES `cloud`.`data_center`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_dedicated_resources__pod_id` FOREIGN KEY (`pod_id`) REFERENCES `cloud`.`host_pod_ref`(`id`),
@@ -444,8 +451,10 @@ CREATE TABLE `cloud`.`dedicated_resources` (
   CONSTRAINT `fk_dedicated_resources__host_id` FOREIGN KEY (`host_id`) REFERENCES `cloud`.`host`(`id`),
   CONSTRAINT `fk_dedicated_resources__domain_id` FOREIGN KEY (`domain_id`) REFERENCES `domain`(`id`),
   CONSTRAINT `fk_dedicated_resources__account_id` FOREIGN KEY (`account_id`) REFERENCES `account`(`id`),
+  CONSTRAINT `fk_dedicated_resources__affinity_group_id` FOREIGN KEY (`affinity_group_id`) REFERENCES `affinity_group`(`id`) ON DELETE CASCADE,
   INDEX `i_dedicated_resources_domain_id`(`domain_id`),
   INDEX `i_dedicated_resources_account_id`(`account_id`),
+  INDEX `i_dedicated_resources_affinity_group_id`(`affinity_group_id`),
   CONSTRAINT `uc_dedicated_resources__uuid` UNIQUE (`uuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -475,9 +484,6 @@ ALTER TABLE `cloud`.`alert` ADD COLUMN `archived` tinyint(1) unsigned NOT NULL D
 ALTER TABLE `cloud`.`event` ADD COLUMN `archived` tinyint(1) unsigned NOT NULL DEFAULT 0;
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server', 'alert.purge.interval', '86400', 'The interval (in seconds) to wait before running the alert purge thread');
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server', 'alert.purge.delay', '0', 'Alerts older than specified number days will be purged. Set this value to 0 to never delete alerts');
-
-INSERT INTO `cloud`.`dedicated_resources` (`data_center_id`, `domain_id`) SELECT `id`, `domain_id` FROM `cloud`.`data_center` WHERE `domain_id` IS NOT NULL;
-UPDATE `cloud`.`data_center` SET `domain_id` = NULL WHERE `domain_id` IS NOT NULL;
 
 DROP VIEW IF EXISTS `cloud`.`event_view`;
 CREATE VIEW `cloud`.`event_view` AS
@@ -898,6 +904,7 @@ CREATE VIEW `cloud`.`affinity_group_view` AS
         affinity_group.type type,
         affinity_group.description description,
         affinity_group.uuid uuid,
+		affinity_group.acl_type acl_type,
         account.id account_id,
         account.uuid account_uuid,
         account.account_name account_name,
@@ -2327,3 +2334,40 @@ CREATE TABLE `cloud`.`ldap_configuration` (
   PRIMARY KEY  (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+DROP VIEW IF EXISTS `cloud`.`data_center_view`;
+CREATE VIEW `cloud`.`data_center_view` AS
+    select 
+        data_center.id,
+        data_center.uuid,
+        data_center.name,
+        data_center.is_security_group_enabled,
+        data_center.is_local_storage_enabled,
+        data_center.description,
+        data_center.dns1,
+        data_center.dns2,
+        data_center.ip6_dns1,
+        data_center.ip6_dns2,
+        data_center.internal_dns1,
+        data_center.internal_dns2,
+        data_center.guest_network_cidr,
+        data_center.domain,
+        data_center.networktype,
+        data_center.allocation_state,
+        data_center.zone_token,
+        data_center.dhcp_provider,
+        data_center.removed,
+        domain.id domain_id,
+        domain.uuid domain_uuid,
+        domain.name domain_name,
+        domain.path domain_path,
+		dedicated_resources.affinity_group_id,
+		dedicated_resources.account_id,
+		affinity_group.uuid affinity_group_uuid
+    from
+        `cloud`.`data_center`
+            left join
+        `cloud`.`domain` ON data_center.domain_id = domain.id
+			left join
+        `cloud`.`dedicated_resources` ON data_center.id = dedicated_resources.data_center_id
+			left join
+        `cloud`.`affinity_group` ON dedicated_resources.affinity_group_id = affinity_group.id;

@@ -25,7 +25,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -35,12 +34,13 @@ import java.util.UUID;
 import javax.ejb.Local;
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
-import javax.naming.Context;
-import javax.naming.NamingException;
-import javax.naming.directory.DirContext;
-import javax.naming.directory.InitialDirContext;
+
+import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.acl.SecurityChecker;
+import org.apache.cloudstack.affinity.AffinityGroup;
+import org.apache.cloudstack.affinity.AffinityGroupService;
+import org.apache.cloudstack.affinity.dao.AffinityGroupDao;
 import org.apache.cloudstack.api.command.admin.config.UpdateCfgCmd;
 import org.apache.cloudstack.api.command.admin.network.CreateNetworkOfferingCmd;
 import org.apache.cloudstack.api.command.admin.network.DeleteNetworkOfferingCmd;
@@ -66,9 +66,11 @@ import org.apache.cloudstack.api.command.admin.zone.UpdateZoneCmd;
 import org.apache.cloudstack.api.command.user.network.ListNetworkOfferingsCmd;
 import org.apache.cloudstack.config.Configuration;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.engine.subsystem.api.storage.DataStoreManager;
-import org.apache.cloudstack.framework.config.ConfigurationVO;
+import org.apache.cloudstack.framework.config.ConfigKey;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.framework.config.impl.ConfigurationVO;
 import org.apache.cloudstack.region.PortableIp;
 import org.apache.cloudstack.region.PortableIpDao;
 import org.apache.cloudstack.region.PortableIpRange;
@@ -82,10 +84,10 @@ import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolDetailVO;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolDetailsDao;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolVO;
-import org.apache.log4j.Logger;
 
 import com.cloud.alert.AlertManager;
 import com.cloud.api.ApiDBUtils;
+import com.cloud.capacity.CapacityManager;
 import com.cloud.capacity.dao.CapacityDao;
 import com.cloud.configuration.Resource.ResourceType;
 import com.cloud.dc.AccountVlanMapVO;
@@ -135,7 +137,6 @@ import com.cloud.network.Network.Capability;
 import com.cloud.network.Network.GuestType;
 import com.cloud.network.Network.Provider;
 import com.cloud.network.Network.Service;
-import com.cloud.network.NetworkManager;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.Networks.BroadcastDomainType;
@@ -185,7 +186,6 @@ import com.cloud.utils.NumbersUtil;
 import com.cloud.utils.Pair;
 import com.cloud.utils.StringUtils;
 import com.cloud.utils.component.ManagerBase;
-import com.cloud.utils.crypt.DBEncryptionUtil;
 import com.cloud.utils.db.DB;
 import com.cloud.utils.db.EntityManager;
 import com.cloud.utils.db.Filter;
@@ -240,7 +240,7 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
     @Inject
     AccountManager _accountMgr;
     @Inject
-    NetworkManager _networkMgr;
+    NetworkOrchestrationService _networkMgr;
     @Inject
     NetworkService _networkSvc;
     @Inject
@@ -301,6 +301,10 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
     DedicatedResourceDao _dedicatedDao;
     @Inject
     IpAddressManager _ipAddrMgr;
+    @Inject
+    AffinityGroupDao _affinityGroupDao;
+    @Inject
+    AffinityGroupService _affinityGroupService;
 
     // FIXME - why don't we have interface for DataCenterLinkLocalIpAddressDao?
     @Inject
@@ -352,18 +356,18 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
 
     private void weightBasedParametersForValidation() {
         weightBasedParametersForValidation = new HashSet<String>();
-        weightBasedParametersForValidation.add(Config.CPUCapacityThreshold.key());
-        weightBasedParametersForValidation.add(Config.StorageAllocatedCapacityThreshold.key());
-        weightBasedParametersForValidation.add(Config.StorageCapacityThreshold.key());
-        weightBasedParametersForValidation.add(Config.MemoryCapacityThreshold.key());
+        weightBasedParametersForValidation.add(AlertManager.CPUCapacityThreshold.key());
+        weightBasedParametersForValidation.add(AlertManager.StorageAllocatedCapacityThreshold.key());
+        weightBasedParametersForValidation.add(AlertManager.StorageCapacityThreshold.key());
+        weightBasedParametersForValidation.add(AlertManager.MemoryCapacityThreshold.key());
         weightBasedParametersForValidation.add(Config.PublicIpCapacityThreshold.key());
         weightBasedParametersForValidation.add(Config.PrivateIpCapacityThreshold.key());
         weightBasedParametersForValidation.add(Config.SecondaryStorageCapacityThreshold.key());
         weightBasedParametersForValidation.add(Config.VlanCapacityThreshold.key());
         weightBasedParametersForValidation.add(Config.DirectNetworkPublicIpCapacityThreshold.key());
         weightBasedParametersForValidation.add(Config.LocalStorageCapacityThreshold.key());
-        weightBasedParametersForValidation.add(Config.StorageAllocatedCapacityDisableThreshold.key());
-        weightBasedParametersForValidation.add(Config.StorageCapacityDisableThreshold.key());
+        weightBasedParametersForValidation.add(CapacityManager.StorageAllocatedCapacityDisableThreshold.key());
+        weightBasedParametersForValidation.add(CapacityManager.StorageCapacityDisableThreshold.key());
         weightBasedParametersForValidation.add(Config.CPUCapacityDisableThreshold.key());
         weightBasedParametersForValidation.add(Config.MemoryCapacityDisableThreshold.key());
         weightBasedParametersForValidation.add(Config.AgentLoadThreshold.key());
@@ -374,9 +378,9 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
 
     private void overProvisioningFactorsForValidation() {
         overprovisioningFactorsForValidation = new HashSet<String>();
-        overprovisioningFactorsForValidation.add(Config.MemOverprovisioningFactor.key());
-        overprovisioningFactorsForValidation.add(Config.CPUOverprovisioningFactor.key());
-        overprovisioningFactorsForValidation.add(Config.StorageOverprovisioningFactor.key());
+        overprovisioningFactorsForValidation.add(CapacityManager.MemOverprovisioningFactor.key());
+        overprovisioningFactorsForValidation.add(CapacityManager.CpuOverprovisioningFactor.key());
+        overprovisioningFactorsForValidation.add(CapacityManager.StorageOverprovisioningFactor.key());
     }
 
     @Override
@@ -437,9 +441,9 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
         // if scope is mentioned as global or not mentioned then it is normal
         // global parameter updation
         if (scope != null && !scope.isEmpty()
-                && !Config.ConfigurationParameterScope.global.toString().equalsIgnoreCase(scope)) {
-            switch (Config.ConfigurationParameterScope.valueOf(scope)) {
-            case zone:
+                && !ConfigKey.Scope.Global.toString().equalsIgnoreCase(scope)) {
+            switch (ConfigKey.Scope.valueOf(scope)) {
+            case Zone:
                 DataCenterVO zone = _zoneDao.findById(resourceId);
                 if (zone == null) {
                     throw new InvalidParameterValueException("unable to find zone by id " + resourceId);
@@ -453,7 +457,7 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
                     _dcDetailsDao.update(dcDetailVO.getId(), dcDetailVO);
                 }
                 break;
-            case cluster:
+            case Cluster:
                 ClusterVO cluster = _clusterDao.findById(resourceId);
                 if (cluster == null) {
                     throw new InvalidParameterValueException("unable to find cluster by id " + resourceId);
@@ -468,7 +472,7 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
                 }
                 break;
 
-            case storagepool:
+            case StoragePool:
                 StoragePoolVO pool = _storagePoolDao.findById(resourceId);
                 if (pool == null) {
                     throw new InvalidParameterValueException("unable to find storage pool by id " + resourceId);
@@ -484,7 +488,7 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
                 }
                 break;
 
-            case account:
+            case Account:
                 AccountVO account = _accountDao.findById(resourceId);
                 if (account == null) {
                     throw new InvalidParameterValueException("unable to find account by id " + resourceId);
@@ -648,22 +652,22 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
         int paramCountCheck = 0;
 
         if (zoneId != null) {
-            scope = Config.ConfigurationParameterScope.zone.toString();
+            scope = ConfigKey.Scope.Zone.toString();
             id = zoneId;
             paramCountCheck++;
         }
         if (clusterId != null) {
-            scope = Config.ConfigurationParameterScope.cluster.toString();
+            scope = ConfigKey.Scope.Cluster.toString();
             id = clusterId;
             paramCountCheck++;
         }
         if (accountId != null) {
-            scope = Config.ConfigurationParameterScope.account.toString();
+            scope = ConfigKey.Scope.Account.toString();
             id = accountId;
             paramCountCheck++;
         }
         if (storagepoolId != null) {
-            scope = Config.ConfigurationParameterScope.storagepool.toString();
+            scope = ConfigKey.Scope.StoragePool.toString();
             id = storagepoolId;
             paramCountCheck++;
         }
@@ -1535,6 +1539,14 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
             DedicatedResourceVO dr = _dedicatedDao.findByZoneId(zoneId);
             if (dr != null) {
                 _dedicatedDao.remove(dr.getId());
+                // find the group associated and check if there are any more
+                // resources under that group
+                List<DedicatedResourceVO> resourcesInGroup = _dedicatedDao.listByAffinityGroupId(dr
+                        .getAffinityGroupId());
+                if (resourcesInGroup.isEmpty()) {
+                    // delete the group
+                    _affinityGroupService.deleteAffinityGroup(dr.getAffinityGroupId(), null, null, null);
+                }
             }
         }
 
@@ -1687,12 +1699,6 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
             }
         }
 
-        // update a private zone to public; not vice versa
-        if (isPublic != null && isPublic) {
-            zone.setDomainId(null);
-            zone.setDomain(null);
-        }
-
         Transaction txn = Transaction.currentTxn();
         txn.start();
 
@@ -1744,6 +1750,29 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
         if (dhcpProvider != null) {
             zone.setDhcpProvider(dhcpProvider);
         }
+        
+        // update a private zone to public; not vice versa
+        if (isPublic != null && isPublic) {
+            zone.setDomainId(null);
+            zone.setDomain(null);
+
+            // release the dedication for this zone
+            DedicatedResourceVO resource = _dedicatedDao.findByZoneId(zoneId);
+            Long resourceId = null;
+            if (resource != null) {
+                resourceId = resource.getId();
+                if (!_dedicatedDao.remove(resourceId)) {
+                    throw new CloudRuntimeException("Failed to delete dedicated Zone Resource " + resourceId);
+                }
+                // find the group associated and check if there are any more
+                // resources under that group
+                List<DedicatedResourceVO> resourcesInGroup = _dedicatedDao.listByAffinityGroupId(resource.getAffinityGroupId());
+                if (resourcesInGroup.isEmpty()) {
+                    // delete the group
+                    _affinityGroupService.deleteAffinityGroup(resource.getAffinityGroupId(), null, null, null);
+                }
+            }
+        }
 
         if (!_zoneDao.update(zoneId, zone)) {
             throw new CloudRuntimeException("Failed to edit zone. Please contact Cloud Support.");
@@ -1786,7 +1815,8 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
             txn.start();
             // Create the new zone in the database
             DataCenterVO zone = new DataCenterVO(zoneName, null, dns1, dns2, internalDns1, internalDns2, guestCidr,
-                    null, null, zoneType, zoneToken, networkDomain, isSecurityGroupEnabled, isLocalStorageEnabled,
+                    domain, domainId, zoneType, zoneToken, networkDomain, isSecurityGroupEnabled,
+                    isLocalStorageEnabled,
                     ip6Dns1, ip6Dns2);
             if (allocationStateStr != null && !allocationStateStr.isEmpty()) {
                 Grouping.AllocationState allocationState = Grouping.AllocationState.valueOf(allocationStateStr);
@@ -1799,8 +1829,10 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
             zone = _zoneDao.persist(zone);
             if (domainId != null) {
                 // zone is explicitly dedicated to this domain
+                // create affinity group associated and dedicate the zone.
+                AffinityGroup group = createDedicatedAffinityGroup(null, domainId, null);
                 DedicatedResourceVO dedicatedResource = new DedicatedResourceVO(zone.getId(), null, null, null,
-                        domainId, null);
+                        domainId, null, group.getId());
                 _dedicatedDao.persist(dedicatedResource);
             }
 
@@ -1815,6 +1847,38 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
         } finally {
             txn.close();
         }
+    }
+
+    private AffinityGroup createDedicatedAffinityGroup(String affinityGroupName, Long domainId, Long accountId) {
+        if (affinityGroupName == null) {
+            // default to a groupname with account/domain information
+            affinityGroupName = "ZoneDedicatedGrp-domain-" + domainId + (accountId != null ? "-acct-" + accountId : "");
+        }
+
+        AffinityGroup group = null;
+        String accountName = null;
+
+        if (accountId != null) {
+            AccountVO account = _accountDao.findById(accountId);
+            accountName = account.getAccountName();
+
+            group = _affinityGroupDao.findByAccountAndName(accountId, affinityGroupName);
+            if (group != null) {
+                return group;
+            }
+        } else {
+            // domain level group
+            group = _affinityGroupDao.findDomainLevelGroupByName(domainId, affinityGroupName);
+            if (group != null) {
+                return group;
+            }
+        }
+
+        group = _affinityGroupService.createAffinityGroupInternal(accountName, domainId, affinityGroupName,
+                "ExplicitDedication", "dedicated resources group");
+
+        return group;
+
     }
 
     @Override
@@ -4570,8 +4634,7 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
         if (no.getRateMbps() != null) {
             networkRate = no.getRateMbps();
         } else {
-            networkRate = Integer.parseInt(_configServer.getConfigValue(Config.NetworkThrottlingRate.key(),
-                    Config.ConfigurationParameterScope.zone.toString(), dataCenterId));
+            networkRate = NetworkOrchestrationService.NetworkThrottlingRate.valueIn(dataCenterId);
         }
 
         // networkRate is unsigned int in netowrkOfferings table, and can't be
@@ -4694,8 +4757,7 @@ public class ConfigurationManagerImpl extends ManagerBase implements Configurati
             // for domain router service offering, get network rate from
             if (offering.getSystemVmType() != null
                     && offering.getSystemVmType().equalsIgnoreCase(VirtualMachine.Type.DomainRouter.toString())) {
-                networkRate = Integer.parseInt(_configServer.getConfigValue(Config.NetworkThrottlingRate.key(),
-                        Config.ConfigurationParameterScope.zone.toString(), dataCenterId));
+                networkRate = NetworkOrchestrationService.NetworkThrottlingRate.valueIn(dataCenterId);
             } else {
                 networkRate = Integer.parseInt(_configDao.getValue(Config.VmNetworkThrottlingRate.key()));
             }

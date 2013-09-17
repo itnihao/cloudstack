@@ -36,7 +36,6 @@ import org.apache.cloudstack.storage.datastore.db.ImageStoreVO;
 import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreDao;
 
 import com.cloud.api.ApiDBUtils;
-import com.cloud.configuration.Config;
 import com.cloud.configuration.Resource.ResourceType;
 import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.dao.DataCenterDao;
@@ -170,7 +169,7 @@ public abstract class TemplateAdapterBase extends AdapterBase implements Templat
         }
 
         // check whether owner can create public templates
-        boolean allowPublicUserTemplates = Boolean.parseBoolean(_configServer.getConfigValue(Config.AllowPublicUserTemplates.key(), Config.ConfigurationParameterScope.account.toString(), templateOwner.getId()));
+        boolean allowPublicUserTemplates = TemplateManager.AllowPublicUserTemplates.valueIn(templateOwner.getId());
         if (!isAdmin && !allowPublicUserTemplates && isPublic) {
             throw new InvalidParameterValueException("Only private templates/ISO can be created.");
         }
@@ -216,10 +215,10 @@ public abstract class TemplateAdapterBase extends AdapterBase implements Templat
         }
 
         Long id = _tmpltDao.getNextInSequence(Long.class, "id");
-        CallContext.current().setEventDetails("Id: " +id+ " name: " + name);
-        return new TemplateProfile(id, userId, name, displayText, bits, passwordEnabled, requiresHVM, url, isPublic,
-                featured, isExtractable, imgfmt, guestOSId, zoneId, hypervisorType, templateOwner.getAccountName(), templateOwner.getDomainId(),
-                templateOwner.getAccountId(), chksum, bootable, templateTag, details, sshkeyEnabled, null, isDynamicallyScalable, templateType);
+        CallContext.current().setEventDetails("Id: " + id + " name: " + name);
+        return new TemplateProfile(id, userId, name, displayText, bits, passwordEnabled, requiresHVM, url, isPublic, featured, isExtractable, imgfmt, guestOSId, zoneId,
+            hypervisorType, templateOwner.getAccountName(), templateOwner.getDomainId(), templateOwner.getAccountId(), chksum, bootable, templateTag, details, sshkeyEnabled, null,
+            isDynamicallyScalable, templateType);
 
     }
 
@@ -284,7 +283,7 @@ public abstract class TemplateAdapterBase extends AdapterBase implements Templat
             }
 
             template.setCrossZones(true);
-            for (DataCenterVO dc: dcs) {
+            for (DataCenterVO dc : dcs) {
                 _tmpltDao.addTemplateToZone(template, dc.getId());
             }
 
@@ -386,7 +385,7 @@ public abstract class TemplateAdapterBase extends AdapterBase implements Templat
             throw new InvalidParameterValueException("unable to find iso with id " + templateId);
         }
 
-        userId = accountAndUserValidation(account, userId, null, template, "Unable to delete iso " );
+        userId = accountAndUserValidation(account, userId, null, template, "Unable to delete iso ");
 
         UserVO user = _userDao.findById(userId);
         if (user == null) {
@@ -402,6 +401,7 @@ public abstract class TemplateAdapterBase extends AdapterBase implements Templat
 
     @Override
     abstract public VMTemplateVO create(TemplateProfile profile);
+    
     @Override
     abstract public boolean delete(TemplateProfile profile);
 }

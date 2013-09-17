@@ -271,6 +271,7 @@ public class VMwareGuru extends HypervisorGuruBase implements HypervisorGuru {
         // Determine the VM's OS description
         GuestOSVO guestOS = _guestOsDao.findById(vm.getVirtualMachine().getGuestOSId());
         to.setOs(guestOS.getDisplayName());
+        to.setHostName(vm.getHostName());
         return to;
     }
 
@@ -341,7 +342,7 @@ public class VMwareGuru extends HypervisorGuruBase implements HypervisorGuru {
                 }
             }
         }
-
+        
         if(!needDelegation) {
             return new Pair<Boolean, Long>(Boolean.FALSE, new Long(hostId));
         }
@@ -413,14 +414,6 @@ public class VMwareGuru extends HypervisorGuruBase implements HypervisorGuru {
             return guid;
 
         return tokens[0] + "@" + vCenterIp;
-    }
-
-    @Override
-    public List<Command> finalizeExpunge(VirtualMachine vm) {
-        UnregisterVMCommand unregisterVMCommand = new UnregisterVMCommand(vm.getInstanceName());
-        List<Command> commands = new ArrayList<Command>();
-        commands.add(unregisterVMCommand);
-        return commands;
     }
 
     @Override
