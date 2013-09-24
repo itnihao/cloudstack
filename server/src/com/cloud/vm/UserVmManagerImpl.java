@@ -715,7 +715,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         User user = _userDao.findById(userId);
         try {
             VirtualMachineEntity vmEntity = _orchSrvc.getVirtualMachine(vm.getUuid());
-            status = vmEntity.stop(new Long(userId).toString());
+            status = vmEntity.stop(Long.toString(userId));
         } catch (ResourceUnavailableException e) {
             s_logger.debug("Unable to stop due to ", e);
             status = false;
@@ -2152,6 +2152,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     }
 
     @Override
+    @ActionEvent(eventType = EventTypes.EVENT_VM_CREATE, eventDescription = "deploying Vm", create = true)
     public UserVm createBasicSecurityGroupVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, List<Long> securityGroupIdList, Account owner,
             String hostName, String displayName, Long diskOfferingId, Long diskSize, String group,
 	    HypervisorType hypervisor, HTTPMethod httpmethod, String userData, String sshKeyPair,
@@ -2212,6 +2213,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     }
 
     @Override
+    @ActionEvent(eventType = EventTypes.EVENT_VM_CREATE, eventDescription = "deploying Vm", create = true)
     public UserVm createAdvancedSecurityGroupVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, List<Long> networkIdList,
             List<Long> securityGroupIdList, Account owner, String hostName, String displayName, Long diskOfferingId,
 	        Long diskSize, String group, HypervisorType hypervisor, HTTPMethod httpmethod, String userData,
@@ -2328,6 +2330,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     }
 
     @Override
+    @ActionEvent(eventType = EventTypes.EVENT_VM_CREATE, eventDescription = "deploying Vm", create = true)
     public UserVm createAdvancedVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, List<Long> networkIdList, Account owner, String hostName,
         String displayName, Long diskOfferingId, Long diskSize, String group, HypervisorType hypervisor,
 	    HTTPMethod httpmethod, String userData, String sshKeyPair, Map<Long, IpAddresses> requestedIps,
@@ -2449,7 +2452,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         }
     }
 
-    @DB @ActionEvent(eventType = EventTypes.EVENT_VM_CREATE, eventDescription = "deploying Vm", create = true)
+    @DB
     protected UserVm createVirtualMachine(DataCenter zone, ServiceOffering serviceOffering, VirtualMachineTemplate template, String hostName, String displayName, Account owner, Long diskOfferingId,
         Long diskSize, List<NetworkVO> networkList, List<Long> securityGroupIdList, String group, HTTPMethod httpmethod,
 	    String userData, String sshKeyPair, HypervisorType hypervisor, Account caller, Map<Long, IpAddresses> requestedIps,
@@ -2823,9 +2826,9 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         rootDiskTags.add(offering.getTags());
 
         if(isIso){
-            VirtualMachineEntity vmEntity = _orchSrvc.createVirtualMachineFromScratch(vm.getUuid(), new Long(owner.getAccountId()).toString(), vm.getIsoId().toString(), hostName, displayName, hypervisor.name(), guestOSCategory.getName(), offering.getCpu(), offering.getSpeed(), offering.getRamSize(), diskSize,  computeTags, rootDiskTags, networkNicMap, plan);
+            VirtualMachineEntity vmEntity = _orchSrvc.createVirtualMachineFromScratch(vm.getUuid(), Long.toString(owner.getAccountId()), vm.getIsoId().toString(), hostName, displayName, hypervisor.name(), guestOSCategory.getName(), offering.getCpu(), offering.getSpeed(), offering.getRamSize(), diskSize,  computeTags, rootDiskTags, networkNicMap, plan);
         }else {
-            VirtualMachineEntity vmEntity = _orchSrvc.createVirtualMachine(vm.getUuid(), new Long(owner.getAccountId()).toString(), new Long(template.getId()).toString(), hostName, displayName, hypervisor.name(), offering.getCpu(),  offering.getSpeed(), offering.getRamSize(), diskSize, computeTags, rootDiskTags, networkNicMap, plan);
+            VirtualMachineEntity vmEntity = _orchSrvc.createVirtualMachine(vm.getUuid(), Long.toString(owner.getAccountId()), Long.toString(template.getId()), hostName, displayName, hypervisor.name(), offering.getCpu(),  offering.getSpeed(), offering.getRamSize(), diskSize, computeTags, rootDiskTags, networkNicMap, plan);
         }
 
 
@@ -3166,7 +3169,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         boolean status = false;
         try {
             VirtualMachineEntity vmEntity = _orchSrvc.getVirtualMachine(vm.getUuid());
-            status = vmEntity.stop(new Long(userId).toString());
+            status = vmEntity.stop(Long.toString(userId));
             if (status) {
                return _vmDao.findById(vmId);
             } else {
@@ -3342,8 +3345,8 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
             }
         }
 
-        String reservationId = vmEntity.reserve(plannerName, plan, new ExcludeList(), new Long(callerUser.getId()).toString());
-        vmEntity.deploy(reservationId, new Long(callerUser.getId()).toString(), params);
+        String reservationId = vmEntity.reserve(plannerName, plan, new ExcludeList(), Long.toString(callerUser.getId()));
+        vmEntity.deploy(reservationId, Long.toString(callerUser.getId()), params);
 
         Pair<UserVmVO, Map<VirtualMachineProfile.Param, Object>> vmParamPair = new Pair(vm, params);
         if (vm != null && vm.isUpdateParameters()) {
@@ -3387,7 +3390,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
 
         try {
             VirtualMachineEntity vmEntity = _orchSrvc.getVirtualMachine(vm.getUuid());
-            status = vmEntity.destroy(new Long(userId).toString());
+            status = vmEntity.destroy(Long.toString(userId));
         } catch (CloudException e) {
             CloudRuntimeException ex = new CloudRuntimeException(
                     "Unable to destroy with specified vmId", e);

@@ -174,12 +174,12 @@ cp packaging/centos63/replace.properties build/replace.properties
 echo VERSION=%{_maventag} >> build/replace.properties
 echo PACKAGE=%{name} >> build/replace.properties
 
-if [ "%{_ossnoss}" == "NONOSS" -o "%{_ossnoss}" == "nonoss" ] ; then
-   echo "Executing mvn packaging for NONOSS ..."
-   mvn -Pawsapi,systemvm -Dnonoss package clean install
+if [ "%{_ossnoss}" == "NOREDIST" -o "%{_ossnoss}" == "noredist" ] ; then
+   echo "Executing mvn packaging with non-redistributable libraries ..."
+   mvn -Pawsapi,systemvm -Dnoredist clean package
 else
-   echo "Executing mvn packaging for OSS ..."
-   mvn -Pawsapi package -Dsystemvm clean install
+   echo "Executing mvn packaging ..."
+   mvn -Pawsapi,systemvm clean package
 fi
 
 %install
@@ -287,6 +287,8 @@ install -D agent/target/transformed/agent.properties ${RPM_BUILD_ROOT}%{_sysconf
 install -D agent/target/transformed/environment.properties ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/agent/environment.properties
 install -D agent/target/transformed/log4j-cloud.xml ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/agent/log4j-cloud.xml
 install -D agent/target/transformed/cloud-setup-agent ${RPM_BUILD_ROOT}%{_bindir}/%{name}-setup-agent
+install -D agent/target/transformed/cloudstack-agent-upgrade ${RPM_BUILD_ROOT}%{_bindir}/%{name}-agent-upgrade
+install -D agent/target/transformed/libvirtqemuhook ${RPM_BUILD_ROOT}%{_datadir}/%{name}-agent/lib/libvirtqemuhook
 install -D agent/target/transformed/cloud-ssh ${RPM_BUILD_ROOT}%{_bindir}/%{name}-ssh
 install -D plugins/hypervisors/kvm/target/cloud-plugin-hypervisor-kvm-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%name-agent/lib/cloud-plugin-hypervisor-kvm-%{_maventag}.jar
 cp plugins/hypervisors/kvm/target/dependencies/*  ${RPM_BUILD_ROOT}%{_datadir}/%{name}-agent/lib
@@ -461,6 +463,13 @@ fi
 
 %post agent
 if [ "$1" == "1" ] ; then
+    echo "Running %{_bindir}/%{name}-agent-upgrade to update bridge name for upgrade from CloudStack 4.0.x (and before) to CloudStack 4.1 (and later)"
+    %{_bindir}/%{name}-agent-upgrade
+    if [ ! -d %{_sysconfdir}/libvirt/hooks ] ; then
+        mkdir %{_sysconfdir}/libvirt/hooks
+    fi
+    cp -a ${RPM_BUILD_ROOT}%{_datadir}/%{name}-agent/lib/libvirtqemuhook %{_sysconfdir}/libvirt/hooks/qemu
+    /sbin/service libvirtd restart
     /sbin/chkconfig --add cloudstack-agent > /dev/null 2>&1 || true
     /sbin/chkconfig --level 345 cloudstack-agent on > /dev/null 2>&1 || true
 fi
@@ -548,12 +557,14 @@ fi
 
 %files agent
 %attr(0755,root,root) %{_bindir}/%{name}-setup-agent
+%attr(0755,root,root) %{_bindir}/%{name}-agent-upgrade
 %attr(0755,root,root) %{_bindir}/%{name}-ssh
 %attr(0755,root,root) %{_sysconfdir}/init.d/%{name}-agent
 %attr(0755,root,root) %{_datadir}/%{name}-common/scripts/network/cisco
 %config(noreplace) %{_sysconfdir}/%{name}/agent
 %dir %{_localstatedir}/log/%{name}/agent
 %attr(0644,root,root) %{_datadir}/%{name}-agent/lib/*.jar
+%attr(0755,root,root) %{_datadir}/%{name}-agent/lib/libvirtqemuhook
 %dir %{_datadir}/%{name}-agent/plugins
 %{_defaultdocdir}/%{name}-agent-%{version}/LICENSE
 %{_defaultdocdir}/%{name}-agent-%{version}/NOTICE
