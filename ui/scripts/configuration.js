@@ -1306,6 +1306,28 @@
                                             number: true
                                         }
                                     },
+                                    cacheMode: {
+                                        label: 'label.cache.mode',
+                                        docID: 'helpDiskOfferingCacheMode',
+                                        select: function(args) {
+                                            var items = [];
+                                            items.push({
+                                                id: 'none',
+                                                description: 'No disk cache'
+                                            });
+                                            items.push({
+                                                id: 'writeback',
+                                                description: 'Write-back disk caching'
+                                            });
+                                            items.push({
+                                                id: 'writethrough',
+                                                description: 'Write-through disk caching'
+                                            });
+                                            args.response.success({
+                                                data: items
+                                            });
+                                        }
+                                    },
                                     tags: {
                                         label: 'label.storage.tags',
                                         docID: 'helpDiskOfferingStorageTags'
@@ -1352,6 +1374,7 @@
                                     name: args.data.name,
                                     displaytext: args.data.description,
                                     storageType: args.data.storageType,
+                                    cacheMode: args.data.cacheMode,
                                     customized: (args.data.isCustomized == "on")
                                 };
 
@@ -1571,6 +1594,9 @@
                                     },
                                     diskIopsWriteRate: {
                                         label: 'label.disk.iops.write.rate'
+                                    },
+                                    cacheMode: {
+                                        label: 'label.cache.mode',
                                     },
                                     tags: {
                                         label: 'label.storage.tags'

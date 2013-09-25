@@ -326,6 +326,10 @@ cloudStack.docs = {
         desc: 'Appears only if Custom IOPS is not selected. Define the maximum volume IOPS.',
         externalLink: ''
     },
+    helpDiskOfferingCacheMode: {
+        desc: 'The write caching mode to use for disks created with this disk offering. This can improve write performance.',
+        externalLink: ''
+    },
     helpDiskOfferingStorageTags: {
         desc: 'Comma-separated list of attributes that should be associated with the primary storage for this disk. For example "ssd,blue".',
         externalLink: ''
